@@ -1,81 +1,92 @@
-const axios = require('axios');
-const CONFIG = require('./config');
+import Anthropic from "@anthropic-ai/sdk";
+import UserInterface from "./userInterface.js";
+import { CONFIG } from "./config.js";
+import { getTextDeepseek } from "./deepseek.js";
+import { getTextGpt } from "./openai.js";
+import { getTextGemini } from "./gemini.js";
+import chalk from "chalk";
+import axios from "axios"; // Added axios import
 
-// Assuming these modules exist and export a getResponse function:
-// For the purpose of this subtask, we cannot verify if these files exist.
-// We will assume they will be created or already exist as per the project's structure.
-let getOpenAIResponse = async (prompt, model, maxNewTokens) => { throw new Error("OpenAI module not implemented/loaded"); };
-let getGeminiResponse = async (prompt, model, maxNewTokens) => { throw new Error("Gemini module not implemented/loaded"); };
-let getDeepSeekResponse = async (prompt, model, maxNewTokens) => { throw new Error("DeepSeek module not implemented/loaded"); };
+export async function getResponse(prompt, model, apiKey, maxNewTokens = 100) { // Added maxNewTokens
+    model = model || (await UserInterface.getModel());
+    const temperature = await UserInterface.getTemperature(); // Temperature might not be used by OpenVINO server directly
 
-// Attempt to load them if they exist, otherwise keep the stubs.
-// This is a simplified approach for the subtask.
-// A more robust solution would handle this in the main application setup.
-try {
-    const openaiModule = require('./openai');
-    if (openaiModule && openaiModule.getResponse) {
-        getOpenAIResponse = openaiModule.getResponse;
-    }
-} catch (e) {
-    console.warn("OpenAI module (openai.js) not found or failed to load. Using stub.");
-}
-try {
-    const geminiModule = require('./gemini');
-    if (geminiModule && geminiModule.getResponse) {
-        getGeminiResponse = geminiModule.getResponse;
-    }
-} catch (e) {
-    console.warn("Gemini module (gemini.js) not found or failed to load. Using stub.");
-}
-try {
-    const deepseekModule = require('./deepseek');
-    if (deepseekModule && deepseekModule.getResponse) {
-        getDeepSeekResponse = deepseekModule.getResponse;
-    }
-} catch (e) {
-    console.warn("DeepSeek module (deepseek.js) not found or failed to load. Using stub.");
-}
-
-
-async function getResponse(prompt, model = CONFIG.defaultLocalModelName, maxNewTokens = 4096) {
-    // If CONFIG.model is intended to be the primary source of truth, adjust accordingly.
-    // For now, using defaultLocalModelName as a fallback if no model is passed.
-    // Or, rely on the caller to always pass CONFIG.model from their context.
-    // The original instruction was: model = CONFIG.model
-    // This might need clarification if CONFIG.model is not set or if a different model is intended by default.
-    // Sticking to passed 'model' parameter first, then CONFIG.defaultLocalModelName as a fallback.
-
-    const selectedModel = model || CONFIG.defaultLocalModelName;
-
-    if (selectedModel.startsWith('openvino_local')) {
+    if (model === "openvino_local") {
+        console.log(chalk.yellow(`🧪 Using local OpenVINO model via: ${CONFIG.localOpenVinoServerUrl}`));
         try {
-            console.log(`Routing to Local OpenVINO server at ${CONFIG.localOpenVinoServerUrl}...`);
-            const response = await axios.post(CONFIG.localOpenVinoServerUrl, {
+            const payload = {
                 prompt: prompt,
                 max_new_tokens: maxNewTokens
+            };
+            const response = await axios.post(CONFIG.localOpenVinoServerUrl, payload, {
+                headers: { "Content-Type": "application/json" },
             });
-            return response.data.generated_text;
-        } catch (error) {
-            console.error("Error communicating with Local OpenVINO server:", error.message);
-            if (error.code === 'ECONNREFUSED') {
-                return `FATAL_ERROR: Could not connect to the local OpenVINO inference server. Please ensure it is running and accessible at ${CONFIG.localOpenVinoServerUrl}.`;
-            }
-            // Check if the error has a response from the server (e.g. LLMPipeline not initialized)
-            if (error.response && error.response.data && error.response.data.error) {
-                return `FATAL_ERROR: Local OpenVINO server reported an error: ${error.response.data.error}`;
-            }
-            return `FATAL_ERROR: An unexpected error occurred with the local OpenVINO server: ${error.message}.`;
-        }
-    } else if (selectedModel.startsWith('openai')) {
-        return getOpenAIResponse(prompt, selectedModel, maxNewTokens);
-    } else if (selectedModel.startsWith('gemini')) {
-        return getGeminiResponse(prompt, selectedModel, maxNewTokens);
-    } else if (selectedModel.startsWith('deepseek')) {
-        return getDeepSeekResponse(prompt, selectedModel, maxNewTokens);
-    } else {
-        console.error(`Unknown model provider for model: ${selectedModel}`);
-        return `FATAL_ERROR: Model provider for '${selectedModel}' is not configured in model.js.`;
-    }
-}
 
-module.exports = { getResponse };
+            if (response.data && response.data.generated_text) {
+                // Mimic the structure of Anthropic's response for consistency downstream
+                return {
+                    content: [{ type: "text", text: response.data.generated_text }],
+                    usage: { input_tokens: 0, output_tokens: 0 } // Placeholder for usage if not provided
+                };
+            } else {
+                console.error(chalk.red("Error: Local OpenVINO server response did not contain 'generated_text'. Response:"), response.data);
+                throw new Error("Local OpenVINO server response format error.");
+            }
+        } catch (error) {
+            if (error.response) {
+                // The request was made and the server responded with a status code
+                // that falls out of the range of 2xx
+                console.error(chalk.red(`Error from OpenVINO server: ${error.response.status} - ${JSON.stringify(error.response.data)}`));
+                throw new Error(`OpenVINO server error: ${error.response.status} - ${error.response.data.error || "Unknown error"}`);
+            } else if (error.request) {
+                // The request was made but no response was received
+                console.error(chalk.red(`Error: No response from OpenVINO server at ${CONFIG.localOpenVinoServerUrl}. Is it running?`));
+                throw new Error(`No response from OpenVINO server. Ensure it's running at ${CONFIG.localOpenVinoServerUrl}.`);
+            } else {
+                // Something happened in setting up the request that triggered an Error
+                console.error(chalk.red(`Error making request to OpenVINO server: ${error.message}`));
+                throw new Error(`Error making request to OpenVINO server: ${error.message}`);
+            }
+        }
+    }
+
+    if (model.startsWith("deepseek")) {
+        return await getTextDeepseek(prompt, temperature, model, apiKey);
+    }
+
+    if (model.startsWith("o3") || model.startsWith("o4")) {
+        return await getTextGpt(prompt, temperature, model, apiKey);
+    }
+
+    if (model.startsWith("gemini")) {
+        return await getTextGemini(prompt, temperature, model, apiKey);
+    }
+
+    if (!(apiKey || process.env.CLAUDE_KEY)) {
+        console.log(chalk.red("Please set up CLAUDE_KEY environment variable"));
+        process.exit(1);
+    }
+
+    const anthropic = new Anthropic({ apiKey: apiKey || process.env.CLAUDE_KEY });
+
+    let maxTokens = CONFIG.maxTokens;
+    let thinkingConfig = undefined;
+
+    if (model.includes("3.7")) {
+        maxTokens = 20000;
+        thinkingConfig = {
+            type: "enabled",
+            budget_tokens: 10000,
+        };
+    }
+
+    const response = await anthropic.messages.create({
+        model: model,
+        max_tokens: maxTokens,
+        ...(thinkingConfig && { thinking: thinkingConfig }),
+        temperature: temperature,
+        messages: [{ role: "user", content: prompt }],
+    });
+
+    return response;
+}

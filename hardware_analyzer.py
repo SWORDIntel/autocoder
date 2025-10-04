@@ -1,8 +1,10 @@
+#!/home/jules/.pyenv/shims/python3
 import argparse
 import json
 import platform
 import subprocess
 import sys
+import re
 from datetime import datetime
 
 def get_cpu_info():
@@ -15,10 +17,10 @@ def get_cpu_info():
             "Vendor": info.get('vendor_id_raw', "N/A"),
             "Cores": f"{info.get('count', 'N/A')} physical",
             "Frequency": {
-                "Current": f"{info.get('hz_actual_friendly', 'N/A')}",
-                "Max": f"{info.get('hz_advertised_friendly', 'N/A')}",
+                "Current": info.get('hz_actual_friendly', "N/A"),
+                "Max": info.get('hz_advertised_friendly', "N/A"),
             },
-            "Architecture": info.get('arch', "N/A"),
+            "Architecture": info.get('arch_string_raw', "N/A"),
         }
     except ImportError:
         return {"Error": "py-cpuinfo not installed. Please run: pip install py-cpuinfo"}
@@ -30,8 +32,9 @@ def get_memory_info():
     try:
         import psutil
         mem = psutil.virtual_memory()
+        total_gb = mem.total / (1024**3)
         return {
-            "Total": f"{mem.total / (1024**3):.2f} GB",
+            "Total": f"{total_gb:.2f} GB",
             "Available": f"{mem.available / (1024**3):.2f} GB",
             "Used": f"{mem.used / (1024**3):.2f} GB ({mem.percent}%)",
         }
@@ -40,29 +43,50 @@ def get_memory_info():
     except Exception as e:
         return {"Error": f"Could not retrieve memory info: {e}"}
 
-def get_gpu_info():
-    """Gathers basic GPU information."""
-    # This is a placeholder. A more robust solution would use libraries like `py-nvml` for NVIDIA or `rocm-smi` for AMD.
-    # For this general-purpose script, we'll rely on system commands that are more likely to be present.
+def _run_command(command):
+    """Helper to run a command and return its output."""
     try:
-        # For Linux, `lspci` is a good general tool.
-        if sys.platform.startswith('linux'):
-            result = subprocess.run(['lspci'], capture_output=True, text=True)
-            gpus = [line for line in result.stdout.split('\n') if "VGA compatible controller" in line or "3D controller" in line]
-            if gpus:
-                # Extracting the name, which is often descriptive enough.
-                return [{"Name": gpu.split(': ')[-1]} for gpu in gpus]
-        # For Windows, `wmic` can be used.
-        elif sys.platform.startswith('win32'):
-            result = subprocess.run(['wmic', 'path', 'win32_videocontroller', 'get', 'caption'], capture_output=True, text=True)
-            gpus = [line.strip() for line in result.stdout.split('\n') if line.strip() and "Caption" not in line]
-            return [{"Name": gpu} for gpu in gpus]
-        return [{"Name": "No standard GPU detection tool found for this OS."}]
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        return result.stdout.strip()
     except FileNotFoundError:
-        return [{"Error": "A command-line tool for GPU detection (like 'lspci' or 'wmic') was not found."}]
-    except Exception as e:
-        return [{"Error": f"An error occurred while detecting GPUs: {e}"}]
+        return None
+    except subprocess.CalledProcessError:
+        return None
 
+def get_pci_devices():
+    """Gets a list of PCI devices using lspci."""
+    lspci_output = _run_command(['lspci'])
+    if lspci_output:
+        return lspci_output.split('\n')
+    return []
+
+def get_system_product_info():
+    """Detects if the system is an Intel NUC or Compute Stick."""
+    product_name = _run_command(['dmidecode', '-s', 'system-product-name'])
+    board_name = _run_command(['dmidecode', '-s', 'baseboard-product-name'])
+
+    if product_name is None:
+        return {"Error": "dmidecode not found or failed to run. Try running with sudo."}
+
+    if "NUC" in (product_name or "") or "Compute Stick" in (product_name or ""):
+        return {"Type": "Intel NUC / Compute Stick", "Model": product_name}
+
+    return {"Type": product_name, "Board": board_name}
+
+def parse_pci_devices(pci_devices):
+    """Parses the list of PCI devices for specific components."""
+    gpu_info = []
+    accelerator_info = []
+
+    for device in pci_devices:
+        if "VGA compatible controller" in device and "Intel" in device:
+            gpu_info.append({"Name": device.split(': ', 1)[1]})
+        elif "Processing accelerators" in device and "NPU" in device:
+            accelerator_info.append({"Type": "NPU", "Name": device.split(': ', 1)[1]})
+        elif "Gaussian & Neural-Network Accelerator" in device:
+            accelerator_info.append({"Type": "GNA", "Name": device.split(': ', 1)[1]})
+
+    return gpu_info, accelerator_info
 
 def get_disk_info():
     """Gathers disk storage information."""
@@ -83,7 +107,6 @@ def get_disk_info():
                     "UsagePercentage": f"{usage.percent}%",
                 })
             except Exception:
-                # Ignore partitions that cause errors (e.g., cd-rom with no media)
                 continue
         return disk_info
     except ImportError:
@@ -92,48 +115,33 @@ def get_disk_info():
         return {"Error": f"Could not retrieve disk info: {e}"}
 
 def generate_compiler_flags(cpu_info):
-    """Generates recommended GCC/G++ compiler flags based on CPU architecture."""
-    arch = cpu_info.get("Architecture", "").lower()
-    vendor = cpu_info.get("Vendor", "").lower()
+    """Generates recommended GCC/G++ compiler flags."""
+    model = cpu_info.get("Model", "").lower()
 
-    if "x86" in arch or "amd64" in arch:
-        # A simple approach for x86. A real-world tool would have a detailed CPU feature map.
-        if "intel" in vendor:
-            # Generic flags for modern Intel CPUs
-            return {
-                "Architecture": "-march=native",
-                "Tune": "-mtune=native",
-                "Optimization": "-O3 -flto",
-                "Vectorization": "-ftree-vectorize",
-                "Comment": "Using -march=native is often best for local builds."
-            }
-        elif "amd" in vendor:
-            # Generic flags for modern AMD CPUs
-            return {
-                "Architecture": "-march=native",
-                "Tune": "-mtune=native",
-                "Optimization": "-O3 -flto",
-                "Vectorization": "-ftree-vectorize",
-                "Comment": "Using -march=native is often best for local builds."
-            }
-    # Placeholder for ARM
-    elif "aarch64" in arch or "arm" in arch:
-        return {
-            "Architecture": "-march=native",
-            "Tune": "-mtune=native",
-            "Optimization": "-O3 -flto",
-            "Comment": "Generic ARM flags. Specifics depend on the core (e.g., cortex-a72)."
-        }
+    if "meteor lake" in model:
+        arch_flags = "-march=meteorlake -mtune=meteorlake"
+    else:
+        arch_flags = "-march=native -mtune=native"
 
-    return {"Flags": "Not determined for this architecture."}
+    return {
+        "Architecture": arch_flags,
+        "Optimization": "-O3 -flto -fomit-frame-pointer",
+        "Vectorization": "-ftree-vectorize -ftree-loop-vectorize -ftree-slp-vectorize",
+        "Comment": "Use these flags for performance-critical local builds."
+    }
 
 def display_report(data):
     """Prints the hardware report in a human-readable format."""
     print("="*80)
-    print("HARDWARE ENUMERATION & COMPILER OPTIMIZATION REPORT")
+    print("HARDWARE ENUMERATION & COMPILER OPTIMIZATION REPORT (ENHANCED)")
     print("="*80)
     print(f"Generated: {datetime.now().isoformat()}")
-    print("\n" + "="*20 + " HARDWARE LISTING " + "="*20)
+
+    # System Info
+    print("\nℹ️  SYSTEM INFORMATION")
+    print("."*40)
+    for key, value in data['system_product'].items():
+        print(f"  {key}: {value}")
 
     # CPU
     print("\n🖥  CPU INFORMATION")
@@ -152,29 +160,32 @@ def display_report(data):
     for key, value in data['memory'].items():
         print(f"  {key}: {value}")
 
-    # GPU
+    # Graphics
     print("\n🎮 GRAPHICS CARDS")
     print("."*40)
-    if isinstance(data['gpu'], list) and data['gpu']:
+    if data['gpu']:
         for i, gpu in enumerate(data['gpu']):
-            print(f"  GPU {i+1}:")
-            for key, value in gpu.items():
-                print(f"    {key}: {value}")
+            print(f"  GPU {i+1}: {gpu['Name']}")
     else:
         print("  No GPUs detected or an error occurred.")
 
+    # AI Accelerators
+    print("\n🧠 AI ACCELERATORS")
+    print("."*40)
+    if data['accelerators']:
+        for acc in data['accelerators']:
+            print(f"  • {acc['Type']}: {acc['Name']}")
+    else:
+        print("  No dedicated AI accelerators detected via lspci.")
 
     # Disks
     print("\n💿 STORAGE DEVICES")
     print("."*40)
-    if isinstance(data['disks'], list) and data['disks']:
+    if isinstance(data['disks'], list):
         for i, disk in enumerate(data['disks']):
-            print(f"  Disk {i+1}:")
-            for key, value in disk.items():
-                 print(f"    {key}: {value}")
+            print(f"  Disk {i+1}: {disk['Device']} at {disk['Mountpoint']} ({disk['UsagePercentage']} used)")
     else:
          print("  No disks detected or an error occurred.")
-
 
     print("\n" + "="*20 + " OPTIMAL COMPILER FLAGS " + "="*20)
     # Compiler Flags
@@ -186,40 +197,38 @@ def display_report(data):
     # Quick Copy Commands
     print("\n" + "="*20 + " QUICK COPY COMMANDS " + "="*20)
     flags = data['compiler_flags']
-    cflags = f"{flags.get('Architecture', '')} {flags.get('Tune', '')} {flags.get('Optimization', '')}"
-    print(f'\n# General Purpose Optimization')
+    cflags = f"{flags.get('Architecture', '')} {flags.get('Optimization', '')} {flags.get('Vectorization', '')}"
+    print(f'\n# Performance-Tuned Flags')
     print(f'export CFLAGS="{cflags.strip()}"')
     print(f'export CXXFLAGS="$CFLAGS"')
-    if 'Cores' in data['cpu'] and isinstance(data['cpu']['Cores'], str):
+    if 'Cores' in data['cpu']:
         try:
-            core_count = int(data['cpu']['Cores'].split()[0])
+            core_count = int(re.search(r'\d+', data['cpu']['Cores']).group())
             print(f'\n# Parallel Build (using {core_count} cores)')
             print(f'export MAKEFLAGS="-j{core_count}"')
-        except (ValueError, IndexError):
+        except (ValueError, IndexError, AttributeError):
             pass
 
     print("\n" + "="*80)
 
-
 def main():
     """Main function to gather and display hardware info."""
-    parser = argparse.ArgumentParser(description="A general-purpose hardware enumerator and compiler optimizer.")
-    parser.add_argument('--json', action='store_true', help='Output the report in JSON format instead of human-readable text.')
+    parser = argparse.ArgumentParser(description="An enhanced hardware enumerator and compiler optimizer.")
+    parser.add_argument('--json', action='store_true', help='Output the report in JSON format.')
     args = parser.parse_args()
 
     cpu_info = get_cpu_info()
+    pci_devices = get_pci_devices()
+    gpu_info, accelerator_info = parse_pci_devices(pci_devices)
 
     data = {
+        "system_product": get_system_product_info(),
         "cpu": cpu_info,
         "memory": get_memory_info(),
-        "gpu": get_gpu_info(),
+        "gpu": gpu_info,
+        "accelerators": accelerator_info,
         "disks": get_disk_info(),
         "compiler_flags": generate_compiler_flags(cpu_info),
-        "system": {
-            "OS": platform.system(),
-            "Release": platform.release(),
-            "Version": platform.version()
-        }
     }
 
     if args.json:
