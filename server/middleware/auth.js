@@ -38,7 +38,7 @@ export const checkDeviceLimit = async (req, res, next) => {
         }
 
         next();
-    } catch {
+    } catch (error) {
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -50,7 +50,7 @@ export const isAdmin = async (req, res, next) => {
             return res.status(403).json({ error: "Unauthorized" });
         }
         next();
-    } catch {
+    } catch (error) {
         res.status(500).json({ error: "Internal server error" });
     }
 };

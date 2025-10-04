@@ -1,0 +1,7 @@
+flask
+openvino
+openvino-genai
+optimum[openvino,nncf]
+onnx
+psutil
+py-cpuinfo

@@ -1,14 +1,6 @@
 export const CONFIG = {
     licenseServerUrl: "https://autocode.work",
-    excludedFiles: [
-        "bun.lockb",
-        "package-lock.json",
-        ".gitignore",
-        "eslint.config.js",
-        ".env",
-        "reportWebVitals.js",
-        "server/views/landing.js",
-    ],
+    excludedFiles: ["bun.lockb", "package-lock.json", ".gitignore", "eslint.config.js", ".env", "reportWebVitals.js"],
     excludedDirs: [".git", "node_modules"],
     excludedExtensions: [
         ".md",
@@ -30,6 +22,8 @@ export const CONFIG = {
         ".lock",
     ],
     anthropicModel: "claude-3-5-sonnet-20241022",
+    localOpenVinoServerUrl: "http://localhost:5001/generate",
+    defaultLocalModelName: "openvino_local_phi3_mini_npu",
     maxTokens: 8192,
     maxFileLines: 1300,
     languageConfigs: {
