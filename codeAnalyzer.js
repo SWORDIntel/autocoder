@@ -138,13 +138,13 @@ Provide the suggestions in a structured format.
     ${packageContent}
     
     Please identify:
-    1. Missing packages based on import statements for each supported language
+    1. Missing packages based on import statements for each supported language (e.g., {"javascript": ["react"], "python": ["numpy"]})
     2. Missing files that are referenced but not present in the project structure (please always return filenames based on repo root)
     3. Potential circular dependencies
     4. Dependencies listed in the package file but not used in the project
     5. Dependencies used in the project but not listed in the package file
     
-    Provide the results in a JSON code snippet.
+    Provide the results in a single JSON code snippet.
     `;
         const response = await getResponse(prompt);
 
@@ -153,12 +153,78 @@ Provide the suggestions in a structured format.
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
 
         try {
-            const structuredResults = JSON.parse(response.content?.[0]?.text?.match(/```json([\s\S]*?)```/)?.[1]);
-            if (structuredResults) {
-                await this.createMissingFiles(structuredResults?.missingFiles);
+            const jsonString = response.content?.[0]?.text?.match(/```json([\s\S]*?)```/)?.[1];
+            if (jsonString) {
+                const structuredResults = JSON.parse(jsonString);
+                if (structuredResults) {
+                    await this.createMissingFiles(structuredResults?.missingFiles || []);
+                    await this.installMissingPackages(structuredResults?.unlistedDependencies || structuredResults?.missingPackages || {});
+                }
             }
-        } catch {
-            /* empty */
+        } catch (e) {
+            console.error(chalk.red("❌ Error parsing or processing dependency analysis results."), e);
+        }
+    },
+
+    async installMissingPackages(missingPackages) {
+        if (!missingPackages || Object.keys(missingPackages).length === 0) {
+            console.log(chalk.green("✅ No missing packages to install."));
+            return;
+        }
+
+        console.log(chalk.cyan("📦 Found missing packages."));
+
+        for (const [language, packages] of Object.entries(missingPackages)) {
+            if (packages.length > 0) {
+                const languageConfig = CONFIG.languageConfigs[language];
+                if (!languageConfig) {
+                    console.log(chalk.yellow(`⚠️ No package manager configured for ${language}.`));
+                    continue;
+                }
+
+                const { install } = await inquirer.prompt({
+                    type: "confirm",
+                    name: "install",
+                    message: `Do you want to install the following ${language} package(s): ${packages.join(", ")}?`,
+                    default: true,
+                });
+
+                if (install) {
+                    const packageManager = languageConfig.packageManager;
+                    let installCommand;
+                    // Using a more robust way to construct the install command
+                    switch (packageManager) {
+                        case "npm":
+                            installCommand = `npm install ${packages.join(" ")}`;
+                            break;
+                        case "pip":
+                            installCommand = `pip install ${packages.join(" ")}`;
+                            break;
+                        case "bundler":
+                            installCommand = `bundle add ${packages.join(" ")}`;
+                            break;
+                        case "composer":
+                            installCommand = `composer require ${packages.join(" ")}`;
+                            break;
+                        case "cargo":
+                            installCommand = `cargo add ${packages.join(" ")}`;
+                            break;
+                        // Add more cases for other package managers
+                        default:
+                            console.log(chalk.yellow(`⚠️ Automatic installation not supported for ${language} with package manager: ${packageManager}. Please install manually.`));
+                            continue;
+                    }
+
+                    const spinner = ora(`Installing ${language} packages...`).start();
+                    try {
+                        await execAsync(installCommand);
+                        spinner.succeed(`${language} packages installed successfully.`);
+                    } catch (error) {
+                        spinner.fail(`Error installing ${language} packages.`);
+                        console.error(chalk.red(error.message));
+                    }
+                }
+            }
         }
     },
 

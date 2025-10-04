@@ -23,3 +23,8 @@ Thumbs.db
 
 # Environment variables
 .env
+
+# Models
+TinyLlama-1.1B-Chat-v1.0-int4-sym-gs128-npu/
+*.bin
+*.xml
