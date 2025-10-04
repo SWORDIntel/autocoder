@@ -110,6 +110,7 @@ def generate():
             return jsonify({"error": "Missing 'prompt' in request body"}), 400
 
         print(f"Prompt received. Max new tokens: {max_new_tokens}")
+        print(f"Received request: prompt='{prompt[:50]}...', max_new_tokens={max_new_tokens}")
         generated_text = pipeline(prompt, max_new_tokens=max_new_tokens)
         print("✅ Successfully generated text.")
 
