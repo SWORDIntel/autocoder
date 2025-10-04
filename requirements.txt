@@ -1,7 +1,18 @@
-flask
+# Core ML and Data Science
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+jupyterlab
+
+# OpenVINO and Inference
 openvino
 openvino-genai
 optimum[openvino,nncf]
 onnx
+
+# System and Hardware Utilities
+flask
 psutil
 py-cpuinfo
