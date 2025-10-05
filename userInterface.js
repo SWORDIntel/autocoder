@@ -45,6 +45,7 @@ const UserInterface = {
                 "🌐 16. Generate landing page",
                 "📊 17. Generate API documentation",
                 "🔄 18. Generate full project",
+                "🧠 19. Record a Memory",
                 "🌡️ Change temperature",
                 "🤖 Change model",
                 "🔑 Login",
@@ -416,6 +417,9 @@ const UserInterface = {
                 break;
             case "🔄 18. Generate full project":
                 await CodeGenerator.generateFullProject(projectStructure, readme);
+                break;
+            case "🧠 19. Record a Memory":
+                await CodeAnalyzer.initiateMemoryRecording();
                 break;
             case "🌡️ Change temperature":
                 await this.setTemperature();

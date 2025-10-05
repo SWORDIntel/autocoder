@@ -9,16 +9,71 @@ import inquirer from "inquirer";
 import ora from "ora";
 import fs from "fs/promises";
 import { getResponse } from "./model.js";
+import MemoryManager from "./server/memoryManager.js";
 
 const execAsync = promisify(exec);
 
 const CodeAnalyzer = {
+    async initiateMemoryRecording() {
+        console.log(chalk.cyan("🧠 Initiating memory recording..."));
+
+        const dbUrl = process.env.MONGO_URI || "mongodb://localhost:27017/autocode_memory";
+        await MemoryManager.connect(dbUrl);
+
+        try {
+            const project = path.basename(process.cwd());
+
+            const files = await FileManager.getFilesToProcess();
+            const { selectedFile } = await inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'selectedFile',
+                    message: 'Which file does this memory relate to?',
+                    choices: files,
+                },
+            ]);
+
+            const code = await FileManager.read(selectedFile);
+            const fileExtension = path.extname(selectedFile);
+            const language = this.getLanguageFromExtension(fileExtension);
+
+            const { learnings, tags } = await inquirer.prompt([
+                {
+                    type: 'input',
+                    name: 'learnings',
+                    message: 'What are your key learnings or observations about this code?',
+                    validate: input => input ? true : 'Learnings cannot be empty.'
+                },
+                {
+                    type: 'input',
+                    name: 'tags',
+                    message: 'Enter comma-separated tags for this memory (e.g., refactor, bugfix, security):',
+                },
+            ]);
+
+            const userTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+            const finalTags = [...new Set([language, ...userTags])];
+
+            await MemoryManager.saveMemory({
+                project,
+                file: selectedFile,
+                code,
+                learnings,
+                tags: finalTags,
+            });
+            console.log(chalk.green("✅ Memory successfully recorded in the database."));
+
+        } catch (error) {
+            console.error(chalk.red("❌ An error occurred during memory recording:"), error.message);
+        } finally {
+            await MemoryManager.disconnect();
+        }
+    },
+
     async runLintChecks(filePath) {
         console.log(chalk.cyan(`🔍 Running code quality checks for ${filePath}...`));
         const fileExtension = path.extname(filePath);
-        const language = Object.keys(CONFIG.languageConfigs).find((lang) =>
-            CONFIG.languageConfigs[lang].fileExtensions.includes(fileExtension)
-        );
+        const language = this.getLanguageFromExtension(fileExtension);
 
         if (!language) {
             console.log(chalk.yellow(`⚠️ No linter configured for file extension: ${fileExtension}`));
@@ -42,9 +97,7 @@ const CodeAnalyzer = {
         console.log(chalk.yellow(`🔧 Attempting to fix lint errors for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
-        const language = Object.keys(CONFIG.languageConfigs).find((lang) =>
-            CONFIG.languageConfigs[lang].fileExtensions.includes(fileExtension)
-        );
+        const language = this.getLanguageFromExtension(fileExtension);
 
         const prompt = `
 Please fix the following linter errors in the ${language} file ${filePath}:
@@ -95,14 +148,47 @@ Provide the suggestions in a structured format.
         console.log(chalk.cyan(`🔍 Analyzing code quality for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
-        const language = Object.keys(CONFIG.languageConfigs).find((lang) =>
-            CONFIG.languageConfigs[lang].fileExtensions.includes(fileExtension)
-        );
+        const language = this.getLanguageFromExtension(fileExtension);
+
+        // --- ML Enhancement: Fetch related memories ---
+        const dbUrl = process.env.MONGO_URI || "mongodb://localhost:27017/autocode_memory";
+        await MemoryManager.connect(dbUrl);
+        let relatedMemories = [];
+        try {
+            const searchTags = [language, 'general'];
+            console.log(chalk.cyan(`🧠 Searching for related memories with tags: [${searchTags.join(', ')}]...`));
+            relatedMemories = await MemoryManager.searchMemories(fileContent, searchTags);
+            console.log(chalk.blue(`   Found ${relatedMemories.length} related memories.`));
+        } catch (error) {
+            console.error(chalk.red("❌ Error searching memories:"), error.message);
+        } finally {
+            await MemoryManager.disconnect();
+        }
+
+        const memoryContext = relatedMemories.length > 0
+            ? `
+Here are some related memories and learnings from past interactions with similar code. Use these to provide more insightful and context-aware suggestions:
+${relatedMemories.map(mem => `
+---
+File: ${mem.file}
+Tags: ${mem.tags.join(', ')}
+Learnings: ${mem.learnings}
+Code Snippet:
+\`\`\`${language}
+${mem.code}
+\`\`\`
+---
+`).join('\n')}
+`
+            : "No specific memories found for this code, but analyze it based on general best practices.";
+        // --- End ML Enhancement ---
 
         const prompt = `
 Analyze the following ${language} code for quality and provide improvement suggestions:
 
 ${fileContent}
+
+${memoryContext}
 
 Please consider:
 1. Adherence to DRY, KISS, and SRP principles
@@ -120,6 +206,39 @@ Provide the suggestions in a structured format.
         console.log(chalk.green(`📊 Code quality analysis for ${filePath}:`));
         console.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
+
+        // --- Integrated Workflow: Prompt to save memory ---
+        const { saveMemory } = await inquirer.prompt({
+            type: 'confirm',
+            name: 'saveMemory',
+            message: 'Do you want to save the analysis results as a new memory?',
+            default: true,
+        });
+
+        if (saveMemory) {
+            const { tags } = await inquirer.prompt({
+                type: 'input',
+                name: 'tags',
+                message: 'Enter any additional comma-separated tags for this memory (e.g., refactor, bugfix):'
+            });
+            const userTags = tags.split(',').map(tag => tag.trim()).filter(Boolean);
+            const finalTags = [...new Set([language, 'analysis-result', ...userTags])];
+
+            await MemoryManager.connect(dbUrl);
+            try {
+                await MemoryManager.saveMemory({
+                    project: path.basename(process.cwd()),
+                    file: filePath,
+                    code: fileContent, // Storing the original code that was analyzed
+                    learnings: response.content[0].text, // Storing the AI's analysis
+                    tags: finalTags,
+                });
+            } catch (error) {
+                console.error(chalk.red("❌ Error saving analysis as memory:"), error.message);
+            } finally {
+                await MemoryManager.disconnect();
+            }
+        }
     },
 
     async detectMissingDependencies(projectStructure) {
@@ -138,13 +257,13 @@ Provide the suggestions in a structured format.
     ${packageContent}
     
     Please identify:
-    1. Missing packages based on import statements for each supported language
+    1. Missing packages based on import statements for each supported language (e.g., {"javascript": ["react"], "python": ["numpy"]})
     2. Missing files that are referenced but not present in the project structure (please always return filenames based on repo root)
     3. Potential circular dependencies
     4. Dependencies listed in the package file but not used in the project
     5. Dependencies used in the project but not listed in the package file
     
-    Provide the results in a JSON code snippet.
+    Provide the results in a single JSON code snippet.
     `;
         const response = await getResponse(prompt);
 
@@ -153,12 +272,78 @@ Provide the suggestions in a structured format.
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
 
         try {
-            const structuredResults = JSON.parse(response.content?.[0]?.text?.match(/```json([\s\S]*?)```/)?.[1]);
-            if (structuredResults) {
-                await this.createMissingFiles(structuredResults?.missingFiles);
+            const jsonString = response.content?.[0]?.text?.match(/```json([\s\S]*?)```/)?.[1];
+            if (jsonString) {
+                const structuredResults = JSON.parse(jsonString);
+                if (structuredResults) {
+                    await this.createMissingFiles(structuredResults?.missingFiles || []);
+                    await this.installMissingPackages(structuredResults?.unlistedDependencies || structuredResults?.missingPackages || {});
+                }
             }
-        } catch {
-            /* empty */
+        } catch (e) {
+            console.error(chalk.red("❌ Error parsing or processing dependency analysis results."), e);
+        }
+    },
+
+    async installMissingPackages(missingPackages) {
+        if (!missingPackages || Object.keys(missingPackages).length === 0) {
+            console.log(chalk.green("✅ No missing packages to install."));
+            return;
+        }
+
+        console.log(chalk.cyan("📦 Found missing packages."));
+
+        for (const [language, packages] of Object.entries(missingPackages)) {
+            if (packages.length > 0) {
+                const languageConfig = CONFIG.languageConfigs[language];
+                if (!languageConfig) {
+                    console.log(chalk.yellow(`⚠️ No package manager configured for ${language}.`));
+                    continue;
+                }
+
+                const { install } = await inquirer.prompt({
+                    type: "confirm",
+                    name: "install",
+                    message: `Do you want to install the following ${language} package(s): ${packages.join(", ")}?`,
+                    default: true,
+                });
+
+                if (install) {
+                    const packageManager = languageConfig.packageManager;
+                    let installCommand;
+                    // Using a more robust way to construct the install command
+                    switch (packageManager) {
+                        case "npm":
+                            installCommand = `npm install ${packages.join(" ")}`;
+                            break;
+                        case "pip":
+                            installCommand = `pip install ${packages.join(" ")}`;
+                            break;
+                        case "bundler":
+                            installCommand = `bundle add ${packages.join(" ")}`;
+                            break;
+                        case "composer":
+                            installCommand = `composer require ${packages.join(" ")}`;
+                            break;
+                        case "cargo":
+                            installCommand = `cargo add ${packages.join(" ")}`;
+                            break;
+                        // Add more cases for other package managers
+                        default:
+                            console.log(chalk.yellow(`⚠️ Automatic installation not supported for ${language} with package manager: ${packageManager}. Please install manually.`));
+                            continue;
+                    }
+
+                    const spinner = ora(`Installing ${language} packages...`).start();
+                    try {
+                        await execAsync(installCommand);
+                        spinner.succeed(`${language} packages installed successfully.`);
+                    } catch (error) {
+                        spinner.fail(`Error installing ${language} packages.`);
+                        console.error(chalk.red(error.message));
+                    }
+                }
+            }
         }
     },
 
@@ -178,7 +363,7 @@ Provide the suggestions in a structured format.
         for (const file of packageFiles) {
             const matchingFile = Object.keys(projectStructure).find((key) => key.match(new RegExp(file)));
             if (matchingFile) {
-                return await FileManager.read(matchingFile);
+                return FileManager.read(matchingFile);
             }
         }
 
@@ -204,10 +389,17 @@ Provide the suggestions in a structured format.
         return dependencies;
     },
 
+    getLanguageFromExtension(fileExtension) {
+        for (const [language, config] of Object.entries(CONFIG.languageConfigs)) {
+            if (config.fileExtensions.includes(fileExtension)) {
+                return language;
+            }
+        }
+        return "general"; // Default to general if no specific language found
+    },
+
     extractDependencies(content, fileExtension) {
-        const language = Object.keys(CONFIG.languageConfigs).find((lang) =>
-            CONFIG.languageConfigs[lang].fileExtensions.includes(fileExtension)
-        );
+        const language = this.getLanguageFromExtension(fileExtension);
 
         switch (language) {
             case "javascript":
@@ -411,9 +603,7 @@ Provide the suggestions in a structured format.
         console.log(chalk.cyan(`🚀 Analyzing performance for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
-        const language = Object.keys(CONFIG.languageConfigs).find((lang) =>
-            CONFIG.languageConfigs[lang].fileExtensions.includes(fileExtension)
-        );
+        const language = this.getLanguageFromExtension(fileExtension);
 
         const prompt = `
 Analyze the following ${language} code for performance optimizations:
@@ -441,9 +631,7 @@ Provide detailed performance optimization suggestions in a structured format.
         console.log(chalk.cyan(`🔒 Checking security vulnerabilities for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
-        const language = Object.keys(CONFIG.languageConfigs).find((lang) =>
-            CONFIG.languageConfigs[lang].fileExtensions.includes(fileExtension)
-        );
+        const language = this.getLanguageFromExtension(fileExtension);
 
         const prompt = `
 Analyze the following ${language} code for potential security vulnerabilities:
@@ -472,9 +660,7 @@ Provide detailed security vulnerability analysis and suggestions in a structured
         console.log(chalk.cyan(`🧪 Generating unit tests for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
-        const language = Object.keys(CONFIG.languageConfigs).find((lang) =>
-            CONFIG.languageConfigs[lang].fileExtensions.includes(fileExtension)
-        );
+        const language = this.getLanguageFromExtension(fileExtension);
 
         const prompt = `
 Generate unit tests for the following ${language} code:
