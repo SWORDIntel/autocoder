@@ -6,7 +6,6 @@ import FileManager from "./fileManager.js";
 import ora from "ora";
 import CodeAnalyzer from "./codeAnalyzer.js";
 import DocumentationGenerator from "./documentationGenerator.js";
-import UserInterface from "./userInterface.js";
 import fs from "fs/promises";
 import { getResponse } from "./model.js";
 

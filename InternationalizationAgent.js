@@ -26,8 +26,11 @@ const InternationalizationAgent = {
             const configPath = path.join(process.cwd(), "i18n.config.json");
             const config = JSON.parse(await fs.readFile(configPath, "utf-8"));
             return config.supportedLanguages || defaultLanguages;
-        } catch {
-            console.log(chalk.yellow("No i18n.config.json found. Using default languages."));
+        } catch (error) {
+            console.log(chalk.yellow("No i18n.config.json found, or it contains an error. Using default languages."));
+            if (error.code !== 'ENOENT') {
+                console.error(chalk.red(`   Error reading i18n.config.json: ${error.message}`));
+            }
             return defaultLanguages;
         }
     },

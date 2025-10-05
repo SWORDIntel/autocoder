@@ -48,7 +48,8 @@ router.post("/check", authenticateToken, checkDeviceLimit, async (req, res) => {
             return res.status(429).json({ error: "Daily request limit exceeded", suggestUpgrade: true });
         }
         res.json({ message: "Request allowed" });
-    } catch {
+    } catch (error) {
+        console.error("Error in /check:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 });
@@ -60,7 +61,8 @@ router.get("/user", authenticateToken, async (req, res) => {
             return res.status(404).json({ error: "User not found" });
         }
         res.json(user);
-    } catch {
+    } catch (error) {
+        console.error("Error in /user:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 });
@@ -78,7 +80,8 @@ router.get("/tier-info", authenticateToken, async (req, res) => {
         }
 
         res.json(tierInfo);
-    } catch {
+    } catch (error) {
+        console.error("Error in /tier-info:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 });

@@ -1,18 +1,5 @@
-# Core ML and Data Science
-numpy
-pandas
-scikit-learn
-matplotlib
-seaborn
-jupyterlab
-
-# OpenVINO and Inference
-openvino
+flask
 openvino-genai
+openvino>=2025.1
 optimum[openvino,nncf]
 onnx
-
-# System and Hardware Utilities
-flask
-psutil
-py-cpuinfo
