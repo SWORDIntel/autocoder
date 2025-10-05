@@ -5,8 +5,10 @@ import chalk from "chalk";
 import chokidar from "chokidar";
 
 import FileManager from "./fileManager.js";
-import UserInterface from "./userInterface.js";
+import TUI from "./tui.js";
 import CodeGenerator from "./codeGenerator.js";
+
+const tui = new TUI();
 
 async function runWatchMode() {
     console.log(chalk.blue("👀 Running in watch mode..."));
@@ -30,7 +32,8 @@ async function runWatchMode() {
 
             const projectStructure = await FileManager.getProjectStructure();
             const filesToProcess = await FileManager.getFilesToProcess();
-            await UserInterface.processFiles(filesToProcess, readme, projectStructure);
+            // Corrected to use the 'tui' instance
+            await tui.processFiles(filesToProcess, readme, projectStructure);
 
             console.log(chalk.green("✅ Automated refactoring complete. Watching for new changes..."));
         } catch (error) {
@@ -61,7 +64,7 @@ async function runAutomatedMode(model, apiKey) {
 
         console.log(chalk.cyan("🔧 Generating code for all files..."));
         const filesToProcess = await FileManager.getFilesToProcess();
-        await UserInterface.processFiles(filesToProcess, readme, projectStructure, model, apiKey);
+        await tui.processFiles(filesToProcess, readme, projectStructure, model, apiKey);
         console.log(chalk.green("✅ Code generation for all files complete."));
 
         console.log(chalk.green("🎉 Automated mode completed successfully!"));
@@ -73,8 +76,6 @@ async function runAutomatedMode(model, apiKey) {
 }
 
 async function main() {
-    console.log(chalk.blue("👋 Welcome to AutoCode!"));
-
     const args = process.argv.slice(2);
 
     if (args.includes("--watch")) {
@@ -89,22 +90,17 @@ async function main() {
         return; // Exit after automated run
     }
 
-    let continueExecution = true;
-    while (continueExecution) {
-        const readmePath = path.join(process.cwd(), "README.md");
-        let readme = await FileManager.read(readmePath);
-        if (!readme) {
-            console.error(chalk.red("❌ README.md not found or unable to read."));
-            process.exit(1);
-        }
-
-        const projectStructure = await FileManager.getProjectStructure();
-        const { action } = await UserInterface.promptForAction();
-        readme = await FileManager.read(readmePath);
-        continueExecution = await UserInterface.handleAction(action, readme, readmePath, projectStructure);
-    }
+    // Start the TUI by default
+    await tui.init();
+    // Keep the process alive for the TUI
+    return new Promise(() => {});
 }
 
 main().catch((error) => {
-    console.error(chalk.red("❌ An error occurred:"), error.message);
+    // Ensure the screen is restored on crash
+    if (tui.screen) {
+        tui.screen.destroy();
+    }
+    console.error(chalk.red("❌ An error occurred:"), error);
+    process.exit(1);
 });

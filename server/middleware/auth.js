@@ -33,12 +33,13 @@ export const checkDeviceLimit = async (req, res, next) => {
             if (user.devices.length >= deviceLimit) {
                 return res.status(403).json({ error: "Device limit reached" });
             }
-            user.addDevice(deviceIp);
+            user.devices.push(deviceIp);
             await user.save();
         }
 
         next();
-    } catch {
+    } catch (error) {
+        console.error("Error in checkDeviceLimit:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -50,7 +51,8 @@ export const isAdmin = async (req, res, next) => {
             return res.status(403).json({ error: "Unauthorized" });
         }
         next();
-    } catch {
+    } catch (error) {
+        console.error("Error in isAdmin:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };

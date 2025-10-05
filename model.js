@@ -1,15 +1,37 @@
 import Anthropic from "@anthropic-ai/sdk";
-import UserInterface from "./userInterface.js";
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
 import { CONFIG } from "./config.js";
 import { getTextDeepseek } from "./deepseek.js";
 import { getTextGpt } from "./openai.js";
 import { getTextGemini } from "./gemini.js";
 import chalk from "chalk";
-import axios from "axios"; // Added axios import
+import axios from "axios";
 
-export async function getResponse(prompt, model, apiKey, maxNewTokens = 100) { // Added maxNewTokens
-    model = model || (await UserInterface.getModel());
-    const temperature = await UserInterface.getTemperature(); // Temperature might not be used by OpenVINO server directly
+async function _getModel() {
+    try {
+        const settings = await fs.readFile(path.join(os.homedir(), ".settings.json"), "utf8");
+        const { model } = JSON.parse(settings);
+        return model || "claude-3-5-sonnet-20240620";
+    } catch {
+        return "claude-3-5-sonnet-20240620";
+    }
+}
+
+async function _getTemperature() {
+    try {
+        const settings = await fs.readFile(path.join(os.homedir(), ".settings.json"), "utf8");
+        const { temperature } = JSON.parse(settings);
+        return temperature || 0.7;
+    } catch {
+        return 0.7;
+    }
+}
+
+export async function getResponse(prompt, model, apiKey, maxNewTokens = 100) {
+    model = model || (await _getModel());
+    const temperature = await _getTemperature();
 
     if (model === "openvino_local") {
         console.log(chalk.yellow(`🧪 Using local OpenVINO model via: ${CONFIG.localOpenVinoServerUrl}`));
@@ -23,10 +45,9 @@ export async function getResponse(prompt, model, apiKey, maxNewTokens = 100) { /
             });
 
             if (response.data && response.data.generated_text) {
-                // Mimic the structure of Anthropic's response for consistency downstream
                 return {
                     content: [{ type: "text", text: response.data.generated_text }],
-                    usage: { input_tokens: 0, output_tokens: 0 } // Placeholder for usage if not provided
+                    usage: { input_tokens: 0, output_tokens: 0 }
                 };
             } else {
                 console.error(chalk.red("Error: Local OpenVINO server response did not contain 'generated_text'. Response:"), response.data);
@@ -34,16 +55,12 @@ export async function getResponse(prompt, model, apiKey, maxNewTokens = 100) { /
             }
         } catch (error) {
             if (error.response) {
-                // The request was made and the server responded with a status code
-                // that falls out of the range of 2xx
                 console.error(chalk.red(`Error from OpenVINO server: ${error.response.status} - ${JSON.stringify(error.response.data)}`));
                 throw new Error(`OpenVINO server error: ${error.response.status} - ${error.response.data.error || "Unknown error"}`);
             } else if (error.request) {
-                // The request was made but no response was received
                 console.error(chalk.red(`Error: No response from OpenVINO server at ${CONFIG.localOpenVinoServerUrl}. Is it running?`));
                 throw new Error(`No response from OpenVINO server. Ensure it's running at ${CONFIG.localOpenVinoServerUrl}.`);
             } else {
-                // Something happened in setting up the request that triggered an Error
                 console.error(chalk.red(`Error making request to OpenVINO server: ${error.message}`));
                 throw new Error(`Error making request to OpenVINO server: ${error.message}`);
             }
