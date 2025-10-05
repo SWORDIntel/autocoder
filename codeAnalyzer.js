@@ -192,26 +192,26 @@ Provide the suggestions in a structured format.`;
         ui.log("🔍 Detecting missing dependencies...");
         const packageContent = await this.getPackageFileContent(projectStructure);
         const prompt = `
-    Analyze the following project structure and detect any missing dependencies or files:
+     Analyze the following project structure and detect any missing dependencies or files:
     
-    ${JSON.stringify(projectStructure, null, 2)}
+     ${JSON.stringify(projectStructure, null, 2)}
     
-    Dependencies graph:
+     Dependencies graph:
     
-    ${JSON.stringify(await this.analyzeDependencies(projectStructure), null, 2)}
+     ${JSON.stringify(await this.analyzeDependencies(projectStructure), null, 2)}
     
-    Package file content:
-    ${packageContent}
+     Package file content:
+     ${packageContent}
     
-    Please identify:
-    1. Missing packages based on import statements for each supported language (e.g., {"javascript": ["react"], "python": ["numpy"]})
-    2. Missing files that are referenced but not present in the project structure (please always return filenames based on repo root)
-    3. Potential circular dependencies
-    4. Dependencies listed in the package file but not used in the project
-    5. Dependencies used in the project but not listed in the package file
+     Please identify:
+     1. Missing packages based on import statements for each supported language (e.g., {"javascript": ["react"], "python": ["numpy"]})
+     2. Missing files that are referenced but not present in the project structure (please always return filenames based on repo root)
+     3. Potential circular dependencies
+     4. Dependencies listed in the package file but not used in the project
+     5. Dependencies used in the project but not listed in the package file
     
-    Provide the results in a single JSON code snippet.
-    `;
+     Provide the results in a single JSON code snippet.
+     `;
         const response = await getResponse(prompt);
 
         ui.log("📊 Missing dependencies analysis:");

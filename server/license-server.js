@@ -28,7 +28,7 @@ const checkRequestLimit = async (userId) => {
 
     const today = new Date().toISOString().split("T")[0];
     if (user.lastRequestDate.toISOString().split("T")[0] !== today) {
-        user.lastRequestDate = today;
+        user.lastRequestDate = new Date();
         user.dailyRequests = 0;
     }
 

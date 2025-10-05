@@ -29,7 +29,7 @@ const InternationalizationAgent = {
         } catch (error) {
             console.log(chalk.yellow("No i18n.config.json found, or it contains an error. Using default languages."));
             if (error.code !== 'ENOENT') {
-                console.error(chalk.red(`   Error reading i18n.config.json: ${error.message}`));
+                console.error(chalk.red(`    Error reading i18n.config.json: ${error.message}`));
             }
             return defaultLanguages;
         }
@@ -40,15 +40,15 @@ const InternationalizationAgent = {
         const queue = [{ structure: projectStructure, path: "" }];
 
         while (queue.length > 0) {
-            const { structure, path } = queue.shift();
+            const { structure, path: currentPath } = queue.shift();
             for (const [name, value] of Object.entries(structure)) {
-                const fullPath = path ? `${path}/${name}` : name;
+                const fullPath = currentPath ? `${currentPath}/${name}` : name;
                 if (value === null && name.endsWith(".js")) {
                     const content = await FileManager.read(fullPath);
                     if (content.includes("export const strings") || content.includes("export default {")) {
                         stringFiles.push(fullPath);
                     }
-                } else if (typeof value === "object") {
+                } else if (typeof value === "object" && value !== null) {
                     queue.push({ structure: value, path: fullPath });
                 }
             }
@@ -89,7 +89,7 @@ import i18next from 'i18next';
 const strings = ${JSON.stringify(i18nStrings, null, 2)};
 
 export const t = (key, lang = i18next.language) => {
-  return strings[lang][key] || key;
+  return strings[lang]?.[key] || key;
 };
 
 export default strings;

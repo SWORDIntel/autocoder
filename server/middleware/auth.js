@@ -33,7 +33,7 @@ export const checkDeviceLimit = async (req, res, next) => {
             if (user.devices.length >= deviceLimit) {
                 return res.status(403).json({ error: "Device limit reached" });
             }
-            user.addDevice(deviceIp);
+            user.devices.push(deviceIp);
             await user.save();
         }
 
