@@ -50,12 +50,14 @@ const CodeAnalyzer = {
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
 
-        if (!language) {
+        const languageConfig = CONFIG.languageConfigs[language];
+
+        if (!languageConfig || !languageConfig.linter) {
             ui.log(`⚠️ No linter configured for file extension: ${fileExtension}`);
             return "";
         }
 
-        const linter = CONFIG.languageConfigs[language].linter;
+        const linter = languageConfig.linter;
         try {
             const { stdout, stderr } = await execAsync(`npx ${linter} ${filePath}`, { encoding: "utf8" });
             if (stdout) ui.log(`⚠️ ${linter} warnings:\n${stdout}`);
