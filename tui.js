@@ -221,6 +221,13 @@ class TUI {
     }
 
     async processFiles(files, readme, projectStructure) {
+        // --- TEMPORARY DEBUGGING ---
+        console.log("--- DEBUG: processFiles called with: ---");
+        console.log("README length:", readme ? readme.length : 'undefined');
+        console.log("Project Structure keys:", projectStructure ? Object.keys(projectStructure) : 'undefined');
+        console.log("-----------------------------------------");
+        // --- END TEMPORARY DEBUGGING ---
+
         // Use provided readme/structure, or fall back to the instance's state.
         const currentReadme = readme || this.readme;
         const currentProjectStructure = projectStructure || this.projectStructure;
