@@ -3,6 +3,7 @@ export const CONFIG = {
     excludedFiles: ["bun.lockb", "package-lock.json", ".gitignore", "eslint.config.js", ".env", "reportWebVitals.js"],
     excludedDirs: [".git", "node_modules"],
     excludedExtensions: [
+        ".md",
         ".svg",
         ".csv",
         ".png",

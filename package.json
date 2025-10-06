@@ -10,7 +10,6 @@
     "scripts": {
         "start": "node index.js",
         "lint": "eslint . --ignore-pattern dist/*",
-        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
         "copy": "copy.cmd",
         "build": "node scripts/copy-files.js",
         "publish": "npm publish ./dist"
@@ -46,7 +45,6 @@
         "@eslint/js": "^9.8.0",
         "fs-extra": "^11.3.0",
         "globals": "^15.9.0",
-        "javascript-obfuscator": "^4.1.1",
-        "jest": "^30.2.0"
+        "javascript-obfuscator": "^4.1.1"
     }
 }

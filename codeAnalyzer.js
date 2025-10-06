@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { CONFIG } from "./config.js";
@@ -37,7 +38,7 @@ const CodeAnalyzer = {
             return `✅ Memory successfully recorded for ${file}.`;
         } catch (error) {
             // Log the full error for debugging but return a user-friendly message
-            console.error(`❌ An error occurred during memory recording for ${file}:`, error);
+            console.error(chalk.red(`❌ An error occurred during memory recording for ${file}:`), error);
             return `❌ Error recording memory: ${error.message}`;
         } finally {
             await MemoryManager.disconnect();
@@ -142,7 +143,7 @@ Provide the suggestions in a structured format.
             const searchTags = [language, 'general'];
             relatedMemories = await MemoryManager.searchMemories(fileContent, searchTags);
         } catch (error) {
-            console.error("❌ Error searching memories:", error);
+            console.error(chalk.red("❌ Error searching memories:"), error);
             // We can continue without memories, but we log the error.
         } finally {
             await MemoryManager.disconnect();
@@ -530,7 +531,7 @@ Provide the suggestions in a structured format.`;
     },
 
     async analyzePerformance(filePath) {
-        console.log(`🚀 Analyzing performance for ${filePath}...`);
+        console.log(chalk.cyan(`🚀 Analyzing performance for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -552,13 +553,13 @@ Provide detailed performance optimization suggestions in a structured format.
 
         const response = await getResponse(prompt);
 
-        console.log(`📊 Performance analysis for ${filePath}:`);
+        console.log(chalk.green(`📊 Performance analysis for ${filePath}:`));
         console.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
     },
 
     async checkSecurityVulnerabilities(filePath) {
-        console.log(`🔒 Checking security vulnerabilities for ${filePath}...`);
+        console.log(chalk.cyan(`🔒 Checking security vulnerabilities for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -581,47 +582,222 @@ Provide detailed security vulnerability analysis and suggestions in a structured
 
         const response = await getResponse(prompt);
 
-        console.log(`📊 Security vulnerability analysis for ${filePath}:`);
+        console.log(chalk.green(`📊 Security vulnerability analysis for ${filePath}:`));
         console.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
     },
 
-    async generateUnitTests(filePath, projectStructure) {
-        console.log(`🧪 Generating unit tests for ${filePath}...`);
+    async generateUnitTests(filePath, projectStructure, ui) {
+        ui.log(`🧪 Generating unit tests for ${filePath}...`);
         const fileContent = await FileManager.read(filePath);
+        if (!fileContent) {
+            ui.log(`⚠️ Could not read file ${filePath}.`);
+            return;
+        }
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
 
         const prompt = `
-Generate unit tests for the following ${language} code:
+Generate a complete, runnable unit test file for the following ${language} code.
 
+File to test: ${filePath}
+Content:
 ${fileContent}
 
-Project structure:
+Project Structure:
 ${JSON.stringify(projectStructure, null, 2)}
 
-Please consider:
-1. Testing all public functions and methods
-2. Covering edge cases and error scenarios
-3. Mocking external dependencies
-4. Achieving high code coverage
-5. Following ${language}-specific testing best practices
+Requirements for the test file:
+1.  Use the appropriate testing framework for ${language} (e.g., Jest for JavaScript, pytest for Python).
+2.  Mock any external dependencies or modules to ensure the unit test is isolated.
+3.  Cover the main functionality of the public methods/functions.
+4.  Include tests for common edge cases (e.g., null inputs, empty arrays).
+5.  Follow best practices for writing clean and maintainable tests in ${language}.
 
-Provide the generated unit tests in a text code format, ready to be saved in a separate test file. Do not include any explanations or comments in your response, just provide the code. Don't use md formatting or code snippets. Just code text
+Return only the raw code for the test file. Do not include any explanations, comments, or markdown formatting.
 `;
 
         const spinner = ora("Generating unit tests...").start();
-
         try {
             const response = await getResponse(prompt);
-            spinner.succeed("Unit tests generated");
-            const testFilePath = filePath.replace(/\.js$/, ".test.js");
-            await FileManager.write(testFilePath, response.content[0].text);
-            console.log(`✅ Unit tests generated and saved to ${testFilePath}`);
+            spinner.succeed("Unit tests generated.");
+            const testCode = CodeGenerator.cleanGeneratedCode(response.content[0].text);
+            const testFilePath = filePath.replace(/(\.[\w\d_]+)$/, '.test$1');
+            await FileManager.write(testFilePath, testCode);
+            ui.log(`✅ Unit tests generated and saved to ${testFilePath}`);
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Error generating unit tests");
-            console.error(`Error: ${error.message}`);
+            spinner.fail("Error generating unit tests.");
+            ui.log(`❌ Error generating unit tests: ${error.message}`);
+            console.error(error);
+        }
+    },
+
+    async checkSecurityVulnerabilities(filePath, ui) {
+        ui.log(`🔒 Checking security vulnerabilities for ${filePath}...`);
+        const fileContent = await FileManager.read(filePath);
+        if (!fileContent) {
+            ui.log(`⚠️ Could not read file ${filePath}.`);
+            return;
+        }
+        const fileExtension = path.extname(filePath);
+        const language = this.getLanguageFromExtension(fileExtension);
+
+        const prompt = `
+Analyze the following ${language} code for potential security vulnerabilities:
+
+${fileContent}
+
+Please consider:
+1. Input validation and sanitization (e.g., for XSS, command injection).
+2. Hardcoded secrets or credentials.
+3. Insecure use of cryptographic functions.
+4. Authentication and authorization flaws.
+5. Data exposure risks (e.g., logging sensitive information).
+6. SQL injection risks (if applicable).
+7. Use of outdated or vulnerable dependencies.
+8. ${language}-specific security best practices.
+
+Provide a detailed security vulnerability analysis and concrete suggestions for fixing them. Structure the output clearly.
+`;
+        const spinner = ora("Analyzing for security vulnerabilities...").start();
+        try {
+            const response = await getResponse(prompt);
+            spinner.succeed(`Security analysis for ${filePath} completed.`);
+            ui.log(`\n📊 Security Vulnerability Analysis for ${filePath}:\n`);
+            ui.log(response.content[0].text);
+            await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
+        } catch (error) {
+            spinner.fail("Error during security analysis.");
+            ui.log(`❌ Error checking security vulnerabilities: ${error.message}`);
+            console.error(error);
+        }
+    },
+
+    async analyzePerformance(filePath, ui) {
+        ui.log(`🚀 Analyzing performance for ${filePath}...`);
+        const fileContent = await FileManager.read(filePath);
+        if (!fileContent) {
+            ui.log(`⚠️ Could not read file ${filePath}.`);
+            return;
+        }
+        const fileExtension = path.extname(filePath);
+        const language = this.getLanguageFromExtension(fileExtension);
+
+        const prompt = `
+Analyze the following ${language} code for performance optimizations:
+
+${fileContent}
+
+Please consider:
+1. Algorithmic complexity (e.g., O(n^2) loops that could be O(n)).
+2. Memory usage and potential memory leaks.
+3. I/O operations (e.g., synchronous file reads in an async context).
+4. Asynchronous operations (e.g., Promise handling, race conditions).
+5. ${language}-specific performance best practices (e.g., using streams in Node.js, list comprehensions in Python).
+
+Provide detailed performance optimization suggestions and concrete code examples for fixing them. Structure the output clearly.
+`;
+        const spinner = ora("Analyzing for performance optimizations...").start();
+        try {
+            const response = await getResponse(prompt);
+            spinner.succeed(`Performance analysis for ${filePath} completed.`);
+            ui.log(`\n🚀 Performance Analysis for ${filePath}:\n`);
+            ui.log(response.content[0].text);
+            await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
+        } catch (error) {
+            spinner.fail("Error during performance analysis.");
+            ui.log(`❌ Error analyzing performance: ${error.message}`);
+            console.error(error);
+        }
+    },
+
+    async detectDeadCode(projectStructure, ui) {
+        ui.log("🗑️ Detecting dead code...");
+        const spinner = ora("Analyzing for dead code...").start();
+
+        try {
+            const allFiles = await FileManager.getFilesToProcess();
+            const allFileContents = {};
+            for (const file of allFiles) {
+                allFileContents[file] = await FileManager.read(file);
+            }
+
+            const prompt = `
+You are an expert static analysis tool. Analyze the entire codebase provided below to find dead or unreachable code.
+
+Project Structure:
+${JSON.stringify(projectStructure, null, 2)}
+
+All File Contents:
+${JSON.stringify(allFileContents, null, 2)}
+
+Please identify:
+1.  **Unused Exports:** Functions, classes, or variables that are exported from a module but never imported or used by any other module.
+2.  **Unused Functions/Classes:** Functions or classes that are defined within a file but never called or instantiated within that file or any other file.
+3.  **Unreachable Code:** Code blocks that can never be executed (e.g., code after a return statement).
+
+For each piece of dead code found, provide the file path, the name of the function/class/variable, and the line number.
+`;
+
+            const response = await getResponse(prompt);
+            spinner.succeed("Dead code analysis complete.");
+            ui.log(`\n🗑️ Dead Code Report:\n`);
+            ui.log(response.content[0].text);
+            await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
+
+        } catch (error) {
+            spinner.fail("Error during dead code detection.");
+            ui.log(`❌ Error detecting dead code: ${error.message}`);
+            console.error(error);
+        }
+    },
+
+    async suggestCrossFileRefactoring(filePaths, projectStructure, ui) {
+        ui.log(`🧠 Analyzing files for cross-file refactoring opportunities...`);
+        const spinner = ora("Analyzing files...").start();
+
+        try {
+            const fileContents = {};
+            for (const filePath of filePaths) {
+                fileContents[filePath] = await FileManager.read(filePath);
+            }
+
+            const prompt = `
+You are an expert software architect specializing in identifying cross-cutting concerns and refactoring opportunities. Analyze the following files from a project.
+
+Project Structure:
+${JSON.stringify(projectStructure, null, 2)}
+
+Files to Analyze:
+${Object.entries(fileContents).map(([path, code]) => `
+--- File: ${path} ---
+\`\`\`
+${code}
+\`\`\`
+`).join('\n')}
+
+Please identify opportunities for cross-file refactoring. Focus on:
+1.  **Duplicated Logic:** Identify functions, classes, or blocks of code that are duplicated across the provided files.
+2.  **Shared Concerns:** Find related logic that could be extracted into a new, shared utility module.
+3.  **Improving Cohesion:** Suggest moving functions or logic to a different file where they would be more logically located.
+
+For each suggestion, provide:
+- A clear description of the problem.
+- The file paths and specific code snippets involved.
+- A concrete refactoring plan, including the name of any new files to be created and the code they should contain.
+`;
+
+            const response = await getResponse(prompt);
+            spinner.succeed("Cross-file refactoring analysis complete.");
+            ui.log(`\n🧠 Cross-File Refactoring Suggestions:\n`);
+            ui.log(response.content[0].text);
+            await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
+
+        } catch (error) {
+            spinner.fail("Error during cross-file refactoring analysis.");
+            ui.log(`❌ Error analyzing for cross-file refactoring: ${error.message}`);
+            console.error(error);
         }
     },
 };
