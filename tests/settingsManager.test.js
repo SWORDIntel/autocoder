@@ -16,38 +16,36 @@ jest.unstable_mockModule('fs/promises', () => ({
 // Now import the module to be tested
 const settingsManager = (await import('../settingsManager.js')).default;
 
-describe('SettingsManager', () => {
+describe('SettingsManager (Local-Only)', () => {
   beforeEach(() => {
     // Reset mocks and clear any instance state before each test
     jest.clearAllMocks();
-    // This is a bit of a hack to reset the singleton's state for testing
+    // Reset the singleton's state for testing
     settingsManager.settings = {
-        model: 'claude-3.5-sonnet-20240620',
+        model: null,
         temperature: 0.7,
-        apiKeys: {
-            anthropic: '',
-            openai: '',
-            google: '',
-            deepseek: '',
-        }
     };
+     // Mock console to keep test output clean
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+      jest.restoreAllMocks();
   });
 
   describe('load', () => {
     it('should load settings from an existing file', async () => {
       const mockSettings = {
-        model: 'o4-mini',
+        model: '/path/to/local/model',
         temperature: 0.5,
-        apiKeys: { openai: 'test-key' },
       };
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockSettings));
 
       await settingsManager.load();
 
       expect(mockFs.readFile).toHaveBeenCalledWith(SETTINGS_FILE_PATH, 'utf8');
-      expect(settingsManager.get('model')).toBe('o4-mini');
+      expect(settingsManager.get('model')).toBe('/path/to/local/model');
       expect(settingsManager.get('temperature')).toBe(0.5);
-      expect(settingsManager.getApiKey('o4-mini')).toBe('test-key');
     });
 
     it('should create a new settings file with defaults if one does not exist', async () => {
@@ -66,46 +64,31 @@ describe('SettingsManager', () => {
     });
 
     it('should handle errors when loading a malformed settings file', async () => {
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
         mockFs.readFile.mockRejectedValue(new Error('Unexpected token'));
-
         await settingsManager.load();
-
         // Should not throw, should log an error, and should retain default settings
-        expect(consoleErrorSpy).toHaveBeenCalled();
-        expect(settingsManager.get('model')).toBe('claude-3.5-sonnet-20240620');
-        consoleErrorSpy.mockRestore();
+        expect(console.error).toHaveBeenCalled();
+        expect(settingsManager.get('model')).toBeNull();
     });
   });
 
   describe('set', () => {
     it('should set a new value and save the settings file', async () => {
-      await settingsManager.set('model', 'gemini-1.5-pro-latest');
-
-      expect(settingsManager.get('model')).toBe('gemini-1.5-pro-latest');
+      await settingsManager.set('model', '/new/path/model');
+      expect(settingsManager.get('model')).toBe('/new/path/model');
       expect(mockFs.writeFile).toHaveBeenCalledWith(
         SETTINGS_FILE_PATH,
-        expect.stringContaining('"model": "gemini-1.5-pro-latest"'),
+        expect.stringContaining('"model": "/new/path/model"'),
         'utf8'
       );
     });
   });
 
-  describe('getApiKey', () => {
-    it('should return the correct API key for each model type', async () => {
-      const mockApiKeys = {
-        anthropic: 'claude-key',
-        openai: 'openai-key',
-        google: 'gemini-key',
-        deepseek: 'deepseek-key',
-      };
-      settingsManager.settings.apiKeys = mockApiKeys;
-
-      expect(settingsManager.getApiKey('claude-3.5-sonnet-20240620')).toBe('claude-key');
-      expect(settingsManager.getApiKey('o4-mini')).toBe('openai-key');
-      expect(settingsManager.getApiKey('gemini-1.5-pro-latest')).toBe('gemini-key');
-      expect(settingsManager.getApiKey('deepseek-coder')).toBe('deepseek-key');
-      expect(settingsManager.getApiKey('unknown-model')).toBeNull();
-    });
+  describe('get', () => {
+      it('should get a value from the settings', async () => {
+          settingsManager.settings.temperature = 0.9;
+          const temp = settingsManager.get('temperature');
+          expect(temp).toBe(0.9);
+      });
   });
 });

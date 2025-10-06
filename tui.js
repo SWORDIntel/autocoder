@@ -6,6 +6,7 @@ import FileManager from './fileManager.js';
 import CodeGenerator from './codeGenerator.js';
 import DocumentationGenerator from './documentationGenerator.js';
 import settingsManager from './settingsManager.js';
+import modelDownloader from './modelDownloader.js'; // Import the new downloader
 
 class TUI {
     constructor() {
@@ -24,15 +25,16 @@ class TUI {
             "📚 Generate project documentation", "🤔 Analyze code quality", "🔍 Optimize project structure",
             "➕ Add new file", "🤖 Run AI Agents", "🔒 Security analysis",
             "🧪 Generate unit tests", "🚀 Analyze performance", "🌐 Generate landing page",
-            "📊 Generate API documentation", "🔄 Generate full project", "🧠 Record a Memory", "🤖 Change model",
+            "📊 Generate API documentation", "🔄 Generate full project", "🧠 Record a Memory",
+            "🤖 Change model", "☁️ Download model", // Added new action
         ];
     }
 
     async init() {
-        this.screen = blessed.screen({ smartCSR: true, title: 'AutoCode TUI (Isolated Dev)' });
+        this.screen = blessed.screen({ smartCSR: true, title: 'AutoCode TUI (Local-Only)' });
         this.createLayout();
         this.setupEventHandlers();
-        this.log("TUI Initialized in isolation.");
+        this.log("TUI Initialized in local-only mode.");
         this.readmePath = path.join(process.cwd(), "README.md");
         await this.refreshAll();
         this.screen.key(['escape', 'q', 'C-c'], () => process.exit(0));
@@ -197,6 +199,9 @@ class TUI {
                 case "Change model":
                     await this.promptForModel();
                     break;
+                case "Download model": // Added new case
+                    await this.promptForModelDownload();
+                    break;
                 default:
                     this.log(`Action '${action}' is not implemented.`);
                     break;
@@ -215,7 +220,11 @@ class TUI {
         this.log("✅ README.md updated successfully.");
     }
 
-    async processFiles(files) {
+    async processFiles(files, readme, projectStructure) {
+        // Use provided readme/structure, or fall back to the instance's state.
+        const currentReadme = readme || this.readme;
+        const currentProjectStructure = projectStructure || this.projectStructure;
+
         const allFileContents = {};
         for (const file of files) {
             allFileContents[path.join(process.cwd(), file)] = await FileManager.read(file);
@@ -224,8 +233,11 @@ class TUI {
         for (const file of files) {
             this.log(`Processing ${file}...`);
             const generatedContent = await CodeGenerator.generate(
-                this.readme, allFileContents[path.join(process.cwd(), file)], file,
-                this.projectStructure, allFileContents
+                currentReadme,
+                allFileContents[path.join(process.cwd(), file)],
+                file,
+                currentProjectStructure,
+                allFileContents
             );
             await FileManager.write(file, generatedContent);
             this.log(`✅ ${file} processed.`);
@@ -255,6 +267,56 @@ class TUI {
                 await this.refreshFileManager();
             } else {
                 this.log("File creation cancelled (no filename).");
+            }
+        });
+
+        input.focus();
+        this.screen.render();
+    }
+
+    async promptForModelDownload() {
+        const form = blessed.form({
+            parent: this.screen,
+            width: '60%',
+            height: 5,
+            top: 'center',
+            left: 'center',
+            border: 'line',
+            label: ' Download Model from Hugging Face ',
+            keys: true,
+        });
+
+        blessed.text({
+            parent: form,
+            top: 1,
+            left: 2,
+            content: 'Enter Model ID (e.g., Intel/neural-chat-7b-v3-1-int8-ov):',
+        });
+
+        const input = blessed.textbox({
+            parent: form,
+            name: 'modelId',
+            top: 2,
+            left: 2,
+            height: 1,
+            width: '95%',
+            inputOnFocus: true,
+            style: { focus: { bg: 'blue' } },
+        });
+
+        input.on('submit', async (modelId) => {
+            form.destroy();
+            this.mainMenu.focus();
+            this.screen.render();
+
+            if (modelId) {
+                try {
+                    await modelDownloader.download(modelId, this);
+                } catch (error) {
+                    this.log(`❌ Error downloading model: ${error.message}`);
+                }
+            } else {
+                this.log('Model download cancelled.');
             }
         });
 
@@ -309,26 +371,36 @@ class TUI {
     }
 
     async promptForModel() {
-        const models = [
-            "claude-3.5-sonnet-20240620",
-            "claude-3-opus-20240229",
-            "o4-mini",
-            "gemini-1.5-pro-latest",
-            "deepseek-coder",
-            "openvino_local"
-        ];
+        this.log("Discovering local models...");
+        const models = await FileManager.discoverLocalModels();
+
+        if (models.length === 0) {
+            this.log("No local models found in the 'models' directory.");
+            this.log("Please make sure you have downloaded models and placed them in subdirectories inside the 'models' folder.");
+            return;
+        }
+
+        const modelNames = models.map(modelPath => path.basename(modelPath));
 
         const list = blessed.list({
-            parent: this.screen, label: ' Select a Model ',
-            width: '50%', height: '50%', top: 'center', left: 'center',
-            border: 'line', items: models, keys: true, mouse: true, vi: true,
-            style: { selected: { bg: 'blue' } }
+            parent: this.screen,
+            label: ' Select a Local Model ',
+            width: '60%',
+            height: '50%',
+            top: 'center',
+            left: 'center',
+            border: 'line',
+            items: modelNames,
+            keys: true,
+            mouse: true,
+            vi: true,
+            style: { selected: { bg: 'blue' } },
         });
 
-        list.on('select', async (item) => {
-            const model = item.getContent();
-            await settingsManager.set('model', model);
-            this.log(`✅ Model set to ${model}`);
+        list.on('select', async (item, select) => {
+            const selectedModelPath = models[select];
+            await settingsManager.set('model', selectedModelPath);
+            this.log(`✅ Model set to ${path.basename(selectedModelPath)}`);
             list.destroy();
             this.screen.render();
         });

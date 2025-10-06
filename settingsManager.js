@@ -4,41 +4,43 @@ import os from 'os';
 
 const SETTINGS_FILE_PATH = path.join(os.homedir(), '.autocode.settings.json');
 
-const defaultSettings = {
-    model: 'claude-3.5-sonnet-20240620',
-    temperature: 0.7,
-    apiKeys: {
-        anthropic: process.env.CLAUDE_KEY || '',
-        openai: process.env.OPENAI_KEY || '',
-        google: process.env.GEMINI_KEY || '',
-        deepseek: process.env.DEEPSEEK_KEY || '',
-    }
-};
-
 class SettingsManager {
     constructor() {
-        this.settings = { ...defaultSettings };
+        this.settings = this.getDefaults();
+    }
+
+    getDefaults() {
+        return {
+            model: null, // Path to the selected local model
+            temperature: 0.7,
+        };
     }
 
     async load() {
         try {
             const fileContent = await fs.readFile(SETTINGS_FILE_PATH, 'utf8');
-            const loadedSettings = JSON.parse(fileContent);
-            // Merge loaded settings with defaults to ensure all keys are present
-            this.settings = {
-                ...defaultSettings,
-                ...loadedSettings,
-                apiKeys: {
-                    ...defaultSettings.apiKeys,
-                    ...(loadedSettings.apiKeys || {}),
-                }
-            };
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                // File doesn't exist, so we'll save the default settings.
+
+            // Guard against empty or whitespace-only files
+            if (!fileContent || fileContent.trim() === '') {
+                this.settings = this.getDefaults();
                 await this.save();
             } else {
-                console.error('Error loading settings:', error);
+                const loadedSettings = JSON.parse(fileContent);
+                // Merge loaded settings with defaults
+                this.settings = {
+                    ...this.getDefaults(),
+                    ...loadedSettings,
+                };
+            }
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                // File doesn't exist, save the default settings.
+                this.settings = this.getDefaults();
+                await this.save();
+            } else {
+                // For other errors (like JSON syntax errors), log it and use defaults.
+                console.error('Error loading settings, using defaults:', error);
+                this.settings = this.getDefaults();
             }
         }
         return this.settings;
@@ -60,27 +62,14 @@ class SettingsManager {
         this.settings[key] = value;
         await this.save();
     }
-
-    getApiKey(modelName) {
-        if (modelName.startsWith('claude')) {
-            return this.settings.apiKeys.anthropic;
-        }
-        if (modelName.startsWith('o3') || modelName.startsWith('o4')) {
-            return this.settings.apiKeys.openai;
-        }
-        if (modelName.startsWith('gemini')) {
-            return this.settings.apiKeys.google;
-        }
-        if (modelName.startsWith('deepseek')) {
-            return this.settings.apiKeys.deepseek;
-        }
-        return null;
-    }
 }
 
 // Export a singleton instance
 const settingsManager = new SettingsManager();
-// Load settings on startup, but don't block the module from being imported
-settingsManager.load();
+// The initial load is best-effort. The app entry point will also call load.
+settingsManager.load().catch(err => {
+    // This catch is to prevent unhandled promise rejections during module load.
+    console.error("Initial settings load failed on module import:", err);
+});
 
 export default settingsManager;

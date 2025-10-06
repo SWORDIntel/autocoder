@@ -1,64 +1,57 @@
-import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import chalk from "chalk";
 import { CONFIG } from "./config.js";
-import { getTextDeepseek } from "./deepseek.js";
-import { getTextGemini } from "./gemini.js";
-import { getTextGpt } from "./openai.js";
 import settingsManager from "./settingsManager.js";
 
 async function getResponse(prompt, modelOverride, maxNewTokens = 4096) {
-    // Load the latest settings, allowing for overrides
+    // Load the latest settings to ensure we have the correct model path
     await settingsManager.load();
-    const model = modelOverride || settingsManager.get('model');
-    const temperature = settingsManager.get('temperature');
-    const apiKey = settingsManager.getApiKey(model);
+    const modelPath = modelOverride || settingsManager.get('model');
 
-    // --- Local OpenVINO Server ---
-    if (model.startsWith("openvino")) {
-        console.log(chalk.yellow(`🧪 Using local OpenVINO model via: ${CONFIG.localOpenVinoServerUrl}`));
-        try {
-            const response = await axios.post(CONFIG.localOpenVinoServerUrl, { prompt, max_new_tokens: maxNewTokens });
-            if (response.data && response.data.generated_text) {
-                return { content: [{ type: "text", text: response.data.generated_text }], usage: {} };
-            }
-            throw new Error("Local OpenVINO server response format error.");
-        } catch (error) {
-            const errorMessage = error.response
-                ? `OpenVINO server error: ${error.response.status} - ${JSON.stringify(error.response.data)}`
-                : `No response from OpenVINO server at ${CONFIG.localOpenVinoServerUrl}. Is it running?`;
-            console.error(chalk.red(errorMessage));
-            throw new Error(errorMessage);
-        }
-    }
-
-    // --- Provider-specific dispatching ---
-    if (model.startsWith("deepseek")) {
-        return await getTextDeepseek(prompt, temperature, model, apiKey);
-    }
-    if (model.startsWith("o3") || model.startsWith("o4")) {
-        return await getTextGpt(prompt, temperature, model, apiKey);
-    }
-    if (model.startsWith("gemini")) {
-        return await getTextGemini(prompt, temperature, model, apiKey);
-    }
-
-    // --- Default to Anthropic (Claude) ---
-    if (!apiKey) {
-        const errorMsg = "Claude API key not found. Please set it in ~/.autocode.settings.json or as CLAUDE_KEY env var.";
-        console.log(chalk.red(errorMsg));
+    // In a local-only setup, the 'model' is the path to the model files.
+    // We don't dispatch to different providers, we just use the local server.
+    if (!modelPath) {
+        const errorMsg = "No local model selected. Please select a model using the /model command.";
+        console.error(chalk.red(errorMsg));
         throw new Error(errorMsg);
     }
 
-    const anthropic = new Anthropic({ apiKey });
-    const response = await anthropic.messages.create({
-        model: model,
-        max_tokens: CONFIG.maxTokens,
-        temperature: temperature,
-        messages: [{ role: "user", content: prompt }],
-    });
+    console.log(chalk.yellow(`🧪 Using local OpenVINO model from path: ${modelPath}`));
 
-    return response;
+    try {
+        const payload = {
+            prompt: prompt,
+            // The model path is now passed in the request to the server,
+            // which will handle loading the correct model.
+            model_path: modelPath,
+            max_new_tokens: maxNewTokens
+        };
+        const response = await axios.post(CONFIG.localOpenVinoServerUrl, payload, {
+            headers: { "Content-Type": "application/json" },
+        });
+
+        if (response.data && response.data.generated_text) {
+            return {
+                content: [{ type: "text", text: response.data.generated_text }],
+                // Usage is not tracked for local models
+                usage: { input_tokens: 0, output_tokens: 0 }
+            };
+        }
+
+        throw new Error("Local OpenVINO server response format error. Missing 'generated_text'.");
+
+    } catch (error) {
+        let errorMessage;
+        if (error.response) {
+            errorMessage = `OpenVINO server error: ${error.response.status} - ${JSON.stringify(error.response.data)}`;
+        } else if (error.request) {
+            errorMessage = `No response from OpenVINO server at ${CONFIG.localOpenVinoServerUrl}. Is it running?`;
+        } else {
+            errorMessage = `Error making request to OpenVINO server: ${error.message}`;
+        }
+        console.error(chalk.red(errorMessage));
+        throw new Error(errorMessage);
+    }
 }
 
 export { getResponse };

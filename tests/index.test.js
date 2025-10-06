@@ -37,6 +37,13 @@ describe('index.js', () => {
         watch: jest.fn(() => ({ on: jest.fn() })),
       },
     }));
+    jest.unstable_mockModule('../inferenceServerManager.js', () => ({
+        default: {
+            start: jest.fn().mockResolvedValue(),
+            stop: jest.fn().mockResolvedValue(),
+        }
+    }));
+
 
     // Re-import modules to apply mocks
     const indexModule = await import('../index.js');
@@ -76,21 +83,12 @@ describe('index.js', () => {
       expect(chokidar.watch).toHaveBeenCalled();
     });
 
-    it('should call runAutomatedMode with correct arguments', async () => {
-      process.argv = ['node', 'index.js', 'generate', 'claude', 'test-api-key'];
+    it('should call runAutomatedMode when --generate flag is provided', async () => {
+      process.argv = ['node', 'index.js', '--generate'];
       await main();
       expect(CodeGenerator.updateReadme).toHaveBeenCalled();
       expect(tuiInstance.processFiles).toHaveBeenCalled();
       expect(mockExit).toHaveBeenCalledWith(0);
-    });
-  });
-
-  describe('runAutomatedMode', () => {
-    it('should call CodeGenerator.updateReadme and tui.processFiles', async () => {
-        await runAutomatedMode('claude', 'test-key');
-        expect(CodeGenerator.updateReadme).toHaveBeenCalled();
-        expect(tuiInstance.processFiles).toHaveBeenCalled();
-        expect(mockExit).toHaveBeenCalledWith(0);
     });
   });
 });
