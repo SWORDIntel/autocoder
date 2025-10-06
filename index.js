@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 
 import path from "path";
+import { fileURLToPath } from 'url';
 import chalk from "chalk";
 import chokidar from "chokidar";
 
 import FileManager from "./fileManager.js";
 import TUI from "./tui.js";
 import CodeGenerator from "./codeGenerator.js";
+import SelfImprovementAgent from './selfImprovementAgent.js';
 
-const tui = new TUI();
+// Export TUI instance for testing
+export const tui = new TUI();
 
-async function runWatchMode() {
+export async function runWatchMode() {
     console.log(chalk.blue("👀 Running in watch mode..."));
     const readmePath = path.join(process.cwd(), "README.md");
 
@@ -32,7 +35,6 @@ async function runWatchMode() {
 
             const projectStructure = await FileManager.getProjectStructure();
             const filesToProcess = await FileManager.getFilesToProcess();
-            // Corrected to use the 'tui' instance
             await tui.processFiles(filesToProcess, readme, projectStructure);
 
             console.log(chalk.green("✅ Automated refactoring complete. Watching for new changes..."));
@@ -45,7 +47,7 @@ async function runWatchMode() {
     return new Promise(() => {});
 }
 
-async function runAutomatedMode(model, apiKey) {
+export async function runAutomatedMode(model, apiKey) {
     try {
         console.log(chalk.blue("🚀 Running in automated mode..."));
         const readmePath = path.join(process.cwd(), "README.md");
@@ -75,8 +77,14 @@ async function runAutomatedMode(model, apiKey) {
     }
 }
 
-async function main() {
+export async function main() {
     const args = process.argv.slice(2);
+
+    if (args.includes("--self-improve")) {
+        const agent = new SelfImprovementAgent();
+        await agent.run();
+        return;
+    }
 
     if (args.includes("--watch")) {
         await runWatchMode();
@@ -96,11 +104,17 @@ async function main() {
     return new Promise(() => {});
 }
 
-main().catch((error) => {
-    // Ensure the screen is restored on crash
-    if (tui.screen) {
-        tui.screen.destroy();
-    }
-    console.error(chalk.red("❌ An error occurred:"), error);
-    process.exit(1);
-});
+// This block runs the main function only when the script is executed directly
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+    main().catch((error) => {
+        // Ensure the screen is restored on crash
+        if (tui && tui.screen) {
+            tui.screen.destroy();
+        }
+        // Use a plain console.error to avoid chalk issues in all environments
+        console.error("❌ An error occurred:", error);
+        process.exit(1);
+    });
+}

@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { CONFIG } from "./config.js";
@@ -38,7 +37,7 @@ const CodeAnalyzer = {
             return `✅ Memory successfully recorded for ${file}.`;
         } catch (error) {
             // Log the full error for debugging but return a user-friendly message
-            console.error(chalk.red(`❌ An error occurred during memory recording for ${file}:`), error);
+            console.error(`❌ An error occurred during memory recording for ${file}:`, error);
             return `❌ Error recording memory: ${error.message}`;
         } finally {
             await MemoryManager.disconnect();
@@ -143,7 +142,7 @@ Provide the suggestions in a structured format.
             const searchTags = [language, 'general'];
             relatedMemories = await MemoryManager.searchMemories(fileContent, searchTags);
         } catch (error) {
-            console.error(chalk.red("❌ Error searching memories:"), error);
+            console.error("❌ Error searching memories:", error);
             // We can continue without memories, but we log the error.
         } finally {
             await MemoryManager.disconnect();
@@ -531,7 +530,7 @@ Provide the suggestions in a structured format.`;
     },
 
     async analyzePerformance(filePath) {
-        console.log(chalk.cyan(`🚀 Analyzing performance for ${filePath}...`));
+        console.log(`🚀 Analyzing performance for ${filePath}...`);
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -553,13 +552,13 @@ Provide detailed performance optimization suggestions in a structured format.
 
         const response = await getResponse(prompt);
 
-        console.log(chalk.green(`📊 Performance analysis for ${filePath}:`));
+        console.log(`📊 Performance analysis for ${filePath}:`);
         console.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
     },
 
     async checkSecurityVulnerabilities(filePath) {
-        console.log(chalk.cyan(`🔒 Checking security vulnerabilities for ${filePath}...`));
+        console.log(`🔒 Checking security vulnerabilities for ${filePath}...`);
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -582,13 +581,13 @@ Provide detailed security vulnerability analysis and suggestions in a structured
 
         const response = await getResponse(prompt);
 
-        console.log(chalk.green(`📊 Security vulnerability analysis for ${filePath}:`));
+        console.log(`📊 Security vulnerability analysis for ${filePath}:`);
         console.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
     },
 
     async generateUnitTests(filePath, projectStructure) {
-        console.log(chalk.cyan(`🧪 Generating unit tests for ${filePath}...`));
+        console.log(`🧪 Generating unit tests for ${filePath}...`);
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -618,11 +617,11 @@ Provide the generated unit tests in a text code format, ready to be saved in a s
             spinner.succeed("Unit tests generated");
             const testFilePath = filePath.replace(/\.js$/, ".test.js");
             await FileManager.write(testFilePath, response.content[0].text);
-            console.log(chalk.green(`✅ Unit tests generated and saved to ${testFilePath}`));
+            console.log(`✅ Unit tests generated and saved to ${testFilePath}`);
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
             spinner.fail("Error generating unit tests");
-            console.error(chalk.red(`Error: ${error.message}`));
+            console.error(`Error: ${error.message}`);
         }
     },
 };

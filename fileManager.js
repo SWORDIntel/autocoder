@@ -1,4 +1,4 @@
-import fs from "fs/promises";
+import * as fs from "fs/promises";
 import path from "path";
 import chalk from "chalk";
 import ignore from "ignore";
