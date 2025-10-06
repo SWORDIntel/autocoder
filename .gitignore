@@ -28,3 +28,7 @@ Thumbs.db
 TinyLlama-1.1B-Chat-v1.0-int4-sym-gs128-npu/
 *.bin
 *.xml
+
+# Python cache
+__pycache__/
+*.pyc

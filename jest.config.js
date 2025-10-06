@@ -5,7 +5,7 @@ export default {
   // Tells Jest to look for .js and .mjs files
   moduleFileExtensions: ['js', 'mjs'],
   // Pattern for discovering test files
-  testMatch: ['**/tests/**/*.test.js'],
+  testMatch: ['**/tests/**/*.(test|integration.test).js'],
   // Ignore node_modules
   testPathIgnorePatterns: ['/node_modules/'],
   // This helps Jest resolve module paths correctly with ESM
