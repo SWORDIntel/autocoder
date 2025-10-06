@@ -17,15 +17,13 @@ class TUI {
         this.projectStructure = null;
         this.readme = null;
         this.readmePath = null;
-        this.multiSelectMode = false;
-        this.selectedFiles = new Set();
 
         this.actions = [
             "📝 Brainstorm README.md", "🔧 Generate code", "🔍 Detect missing dependencies",
             "🚀 Run static code quality checks", "📚 Generate documentation", "🔄 Optimize and refactor file",
             "📚 Generate project documentation", "🤔 Analyze code quality", "🔍 Optimize project structure",
-            "➕ Add new file", "🏗️ Scaffold Component", "✨ Generate Feature", "💡 Refactor File", "🤖 Run AI Agents", "🔒 Security analysis",
-            "🧪 Generate unit tests", "🚀 Analyze performance", "💻 Implement Algorithm", "🔌 Generate API Client", "📜 Generate DB Schema", "🐳 Generate Dockerfile", "🗑️ Detect Dead Code", "🧠 Suggest Cross-File Refactoring", "🌐 Generate landing page",
+            "➕ Add new file", "🤖 Run AI Agents", "🔒 Security analysis",
+            "🧪 Generate unit tests", "🚀 Analyze performance", "🌐 Generate landing page",
             "📊 Generate API documentation", "🔄 Generate full project", "🧠 Record a Memory", "🤖 Change model",
         ];
     }
@@ -74,41 +72,14 @@ class TUI {
             this.handleAction(action);
         });
 
-        this.fileManager.key(['space'], () => {
-            if (!this.multiSelectMode) return;
-
-            const selectedItem = this.fileManager.getItem(this.fileManager.selected);
-            if (!selectedItem) return;
-
-            const fileName = selectedItem.getContent().replace(/\[x\]\s/g, '').trim();
-            if (this.selectedFiles.has(fileName)) {
-                this.selectedFiles.delete(fileName);
-                selectedItem.setContent(fileName);
-            } else {
-                this.selectedFiles.add(fileName);
-                selectedItem.setContent(`[x] ${fileName}`);
-            }
-            this.screen.render();
-        });
-
         this.fileManager.on('select', (item) => {
-            if (!this.pendingFileAction) {
-                this.log(`File selected (no action pending): ${item.getContent().trim()}`);
-                return;
-            }
-
-            if (this.multiSelectMode) {
-                this.log(`Confirmed selection of ${this.selectedFiles.size} files.`);
-                this.executeAction(this.pendingFileAction, Array.from(this.selectedFiles));
-                this.multiSelectMode = false;
-                this.selectedFiles.clear();
-                this.refreshFileManager(); // To clear the '[x]' markers
-                this.mainMenu.focus();
-            } else {
+            if (this.pendingFileAction) {
                 const selectedFile = item.getContent().trim();
                 this.executeAction(this.pendingFileAction, [selectedFile]);
                 this.pendingFileAction = null;
                 this.mainMenu.focus();
+            } else {
+                this.log(`File selected (no action pending): ${item.getContent().trim()}`);
             }
         });
     }
@@ -119,19 +90,10 @@ class TUI {
         const needsFile = [
             "Generate code", "Run static code quality checks", "Generate documentation",
             "Optimize and refactor file", "Analyze code quality", "Security analysis",
-            "Generate unit tests", "Analyze performance", "Record a Memory", "Refactor File",
-            "Generate API Client",
+            "Generate unit tests", "Analyze performance", "Record a Memory",
         ];
 
-        const needsMultiFile = ["Suggest Cross-File Refactoring"];
-
-        if (needsMultiFile.includes(action)) {
-            this.pendingFileAction = action;
-            this.multiSelectMode = true;
-            this.selectedFiles.clear();
-            this.log(`Please select files for '${action}' (space to toggle, enter to confirm)`);
-            this.fileManager.focus();
-        } else if (needsFile.includes(action)) {
+        if (needsFile.includes(action)) {
             this.pendingFileAction = action;
             this.log(`Please select a file for '${action}'`);
             this.fileManager.focus();
@@ -193,53 +155,26 @@ class TUI {
                 case "Add new file":
                     await this.promptForNewFile();
                     break;
-                case "Scaffold Component":
-                    await this.promptForScaffold();
-                    break;
-                case "Generate Feature":
-                    await this.promptForFeature();
-                    break;
-                case "Refactor File":
-                    await this.promptForRefactor(files[0]);
-                    break;
                 case "Run AI Agents":
                     this.log("AI Agents feature is not yet implemented.");
                     break;
                 case "Security analysis":
                     for (const file of files) {
                         this.log(`Analyzing security for ${file}...`);
-                        await CodeAnalyzer.checkSecurityVulnerabilities(file, this);
+                        await CodeAnalyzer.checkSecurityVulnerabilities(file);
                     }
                     break;
                 case "Generate unit tests":
                     for (const file of files) {
                         this.log(`Generating unit tests for ${file}...`);
-                        await CodeAnalyzer.generateUnitTests(file, this.projectStructure, this);
+                        await CodeAnalyzer.generateUnitTests(file, this.projectStructure);
                     }
                     break;
                 case "Analyze performance":
                     for (const file of files) {
                         this.log(`Analyzing performance for ${file}...`);
-                        await CodeAnalyzer.analyzePerformance(file, this);
+                        await CodeAnalyzer.analyzePerformance(file);
                     }
-                    break;
-                case "Implement Algorithm":
-                    await this.promptForAlgorithm();
-                    break;
-                case "Generate API Client":
-                    await CodeGenerator.generateApiClient(files[0], this.projectStructure, this);
-                    break;
-                case "Generate DB Schema":
-                    await this.promptForSchema();
-                    break;
-                case "Generate Dockerfile":
-                    await CodeGenerator.generateDockerfile(this.projectStructure, this);
-                    break;
-                case "Suggest Cross-File Refactoring":
-                    await CodeAnalyzer.suggestCrossFileRefactoring(files, this.projectStructure, this);
-                    break;
-                case "Detect Dead Code":
-                    await CodeAnalyzer.detectDeadCode(this.projectStructure, this);
                     break;
                 case "Generate landing page":
                     this.log("Generating landing page...");
@@ -320,150 +255,6 @@ class TUI {
                 await this.refreshFileManager();
             } else {
                 this.log("File creation cancelled (no filename).");
-            }
-        });
-
-        input.focus();
-        this.screen.render();
-    }
-
-    async promptForSchema() {
-        const form = blessed.form({
-            parent: this.screen, width: '60%', height: 5, top: 'center', left: 'center',
-            border: 'line', label: ' Generate DB Schema (e.g., "a User table with name, email, and password") ', keys: true,
-        });
-
-        const input = blessed.textbox({
-            parent: form, name: 'schemaPrompt', top: 1, left: 2, height: 1, width: '95%',
-            inputOnFocus: true, style: { focus: { bg: 'blue' } },
-        });
-
-        input.on('submit', async (prompt) => {
-            form.destroy();
-            this.mainMenu.focus();
-            this.screen.render();
-
-            if (prompt) {
-                await CodeGenerator.generateSchema(prompt, this.projectStructure, this);
-                await this.refreshFileManager();
-            } else {
-                this.log("Schema generation cancelled (no prompt).");
-            }
-        });
-
-        input.focus();
-        this.screen.render();
-    }
-
-    async promptForAlgorithm() {
-        const form = blessed.form({
-            parent: this.screen, width: '60%', height: 5, top: 'center', left: 'center',
-            border: 'line', label: ' Implement Algorithm (e.g., "a function to implement Dijkstra-s algorithm") ', keys: true,
-        });
-
-        const input = blessed.textbox({
-            parent: form, name: 'algorithmPrompt', top: 1, left: 2, height: 1, width: '95%',
-            inputOnFocus: true, style: { focus: { bg: 'blue' } },
-        });
-
-        input.on('submit', async (prompt) => {
-            form.destroy();
-            this.mainMenu.focus();
-            this.screen.render();
-
-            if (prompt) {
-                await CodeGenerator.implementAlgorithm(prompt, this.projectStructure, this);
-                await this.refreshFileManager();
-            } else {
-                this.log("Algorithm implementation cancelled (no prompt).");
-            }
-        });
-
-        input.focus();
-        this.screen.render();
-    }
-
-    async promptForRefactor(file) {
-        if (!file) {
-            this.log("Error: Refactor File action requires a file to be selected first.");
-            return;
-        }
-
-        const form = blessed.form({
-            parent: this.screen, width: '70%', height: 5, top: 'center', left: 'center',
-            border: 'line', label: ` Refactor ${file} (e.g., "extract the user validation logic into a separate function") `, keys: true,
-        });
-
-        const input = blessed.textbox({
-            parent: form, name: 'refactorPrompt', top: 1, left: 2, height: 1, width: '95%',
-            inputOnFocus: true, style: { focus: { bg: 'blue' } },
-        });
-
-        input.on('submit', async (prompt) => {
-            form.destroy();
-            this.mainMenu.focus();
-            this.screen.render();
-
-            if (prompt) {
-                await CodeGenerator.refactorFile(file, prompt, this.projectStructure, this);
-            } else {
-                this.log("Refactoring cancelled (no prompt).");
-            }
-        });
-
-        input.focus();
-        this.screen.render();
-    }
-
-    async promptForFeature() {
-        const form = blessed.form({
-            parent: this.screen, width: '60%', height: 5, top: 'center', left: 'center',
-            border: 'line', label: ' Generate Feature (e.g., "a user authentication flow with login and registration") ', keys: true,
-        });
-
-        const input = blessed.textbox({
-            parent: form, name: 'featurePrompt', top: 1, left: 2, height: 1, width: '95%',
-            inputOnFocus: true, style: { focus: { bg: 'blue' } },
-        });
-
-        input.on('submit', async (prompt) => {
-            form.destroy();
-            this.mainMenu.focus();
-            this.screen.render();
-
-            if (prompt) {
-                await CodeGenerator.generateMultiFile(prompt, this.projectStructure, this);
-                await this.refreshFileManager();
-            } else {
-                this.log("Feature generation cancelled (no prompt).");
-            }
-        });
-
-        input.focus();
-        this.screen.render();
-    }
-
-    async promptForScaffold() {
-        const form = blessed.form({
-            parent: this.screen, width: '60%', height: 5, top: 'center', left: 'center',
-            border: 'line', label: ' Scaffold Component (e.g., "a React button with primary and secondary variants") ', keys: true,
-        });
-
-        const input = blessed.textbox({
-            parent: form, name: 'scaffoldPrompt', top: 1, left: 2, height: 1, width: '95%',
-            inputOnFocus: true, style: { focus: { bg: 'blue' } },
-        });
-
-        input.on('submit', async (prompt) => {
-            form.destroy();
-            this.mainMenu.focus();
-            this.screen.render();
-
-            if (prompt) {
-                await CodeGenerator.scaffold(prompt, this.projectStructure, this);
-                await this.refreshFileManager();
-            } else {
-                this.log("Scaffolding cancelled (no prompt).");
             }
         });
 

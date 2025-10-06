@@ -12,62 +12,13 @@ import { getResponse } from "./model.js";
 const DEFAULT_MAX_NEW_TOKENS = 4096;
 
 const CodeGenerator = {
-    async analyzeProjectStyle(projectStructure, fileExtension) {
-        const spinner = ora('Analyzing project coding style...').start();
-        try {
-            const language = this.getLanguageFromExtension(fileExtension);
-            const relevantFiles = Object.keys(projectStructure).filter(file => path.extname(file) === fileExtension);
-
-            if (relevantFiles.length === 0) {
-                spinner.info("No existing files of this type found to analyze style. Using default style.");
-                return `Use standard best practices for ${language}.`;
-            }
-
-            const sampleFiles = relevantFiles.slice(0, 3);
-            let sampleCode = '';
-            for (const file of sampleFiles) {
-                sampleCode += `// --- Start of ${file} ---\n`;
-                sampleCode += await FileManager.read(file);
-                sampleCode += `\n// --- End of ${file} ---\n\n`;
-            }
-
-            const stylePrompt = `
-Analyze the following code samples from a project and create a concise coding style guide.
-Focus on:
-- Indentation (spaces vs. tabs, and how many).
-- Naming conventions (camelCase, PascalCase, snake_case for variables, functions, and classes).
-- Brace style (e.g., K&R style where opening brace is on the same line).
-- Use of semicolons (if applicable).
-- Quoting style (single vs. double quotes).
-
-Summarize the detected style in a short list.
-
-Code Samples:
-${sampleCode}
-`;
-            const response = await getResponse(stylePrompt, undefined, undefined, 500);
-            spinner.succeed("Project coding style analyzed.");
-            return response.content[0].text;
-        } catch (error) {
-            spinner.fail("Could not analyze project style. Using default.");
-            return `Use standard best practices.`;
-        }
-    },
-
     async generate(readme, currentCode, fileName, projectStructure, allFileContents, model, apiKey) {
         const fileExtension = path.extname(fileName);
         const language = this.getLanguageFromExtension(fileExtension);
         const languageConfig = CONFIG.languageConfigs[language];
 
-        const styleGuide = await this.analyzeProjectStyle(projectStructure, fileExtension);
-
         const prompt = `
 You are AutoCode, an automatic coding tool. Your task is to generate or update the ${fileName} file based on the README.md instructions, the current ${fileName} content (if any), the project structure, and the content of all other files.
-
-**IMPORTANT: You MUST adhere to the following coding style guide to ensure consistency with the existing project.**
---- STYLE GUIDE ---
-${styleGuide}
---- END STYLE GUIDE ---
 
 README.md content:
 ${readme}
@@ -90,7 +41,7 @@ Linter: ${languageConfig.linter}
 Formatter: ${languageConfig.formatter}
 Package manager: ${languageConfig.packageManager}
 
-Please generate or update the ${fileName} file to implement the features described in the README. Ensure the code is complete, functional, and follows the provided style guide. Consider the project structure and the content of other selected files when making changes or adding new features. Reuse functionality from other modules and avoid duplicating code. Do not include any explanations or comments in your response, just provide the code.
+Please generate or update the ${fileName} file to implement the features described in the README. Ensure the code is complete, functional, and follows best practices for ${language}. Consider the project structure and the content of other selected files when making changes or adding new features. Reuse functionality from other modules and avoid duplicating code. Do not include any explanations or comments in your response, just provide the code.
 `;
 
         const spinner = ora("Generating code...").start();
@@ -163,17 +114,18 @@ ${content}
 Project structure:
 ${JSON.stringify(projectStructure, null, 2)}
 
-Please provide your suggestions in the following format, including the full relative paths and wrapping each code block in markdown:
+Please provide your suggestions in the following Markdown format:
 
-# File: [path/to/original_file_name]
-\`\`\`${language}
+# Original File: [original_file_name]
 [content for the original file]
-\`\`\`
 
-# File: [path/to/new_file_name_1]
-\`\`\`${language}
+# New File: [new_file_name_1]
 [content for new_file_1]
-\`\`\`
+
+# New File: [new_file_name_2]
+[content for new_file_2]
+
+... (repeat for all new files)
 `;
 
         const spinner = ora("Generating file split suggestion...").start();
@@ -193,7 +145,7 @@ Please provide your suggestions in the following format, including the full rela
             });
 
             if (confirmSplit) {
-                const files = this.parseFileBlocks(splitSuggestion);
+                const files = this.parseSplitSuggestion(splitSuggestion);
                 await this.saveFiles(filePath, files);
                 console.log(chalk.green("✅ File split completed."));
             } else {
@@ -207,76 +159,17 @@ Please provide your suggestions in the following format, including the full rela
         }
     },
 
-    parseFileBlocks(response) {
+    parseSplitSuggestion(suggestion) {
         const files = {};
-        const fileRegex = /#\s*File:\s*(.+?)\n```[\w\d]*\n([\s\S]+?)\n```/g;
+        const fileRegex = /# (?:Original File|New File): (.+)\n([\s\S]+?)(?=\n# (?:Original File|New File)|$)/g;
         let match;
 
-        while ((match = fileRegex.exec(response)) !== null) {
+        while ((match = fileRegex.exec(suggestion)) !== null) {
             const [, fileName, content] = match;
             files[fileName.trim()] = content.trim();
         }
 
         return files;
-    },
-
-    async generateMultiFile(featurePrompt, projectStructure, ui) {
-        ui.log(`🤖 Generating feature: "${featurePrompt}"`);
-        const spinner = ora("Generating feature files...").start();
-
-        try {
-            const styleGuide = await this.analyzeProjectStyle(projectStructure, '.js'); // Assume JS for now
-
-            const prompt = `
-You are an expert software architect. Based on the user's request, the project structure, and the coding style, generate all the necessary files for the new feature.
-
-User Request: "${featurePrompt}"
-
-Project Structure:
-${JSON.stringify(projectStructure, null, 2)}
-
-**IMPORTANT: You MUST adhere to the following coding style guide to ensure consistency with the existing project.**
---- STYLE GUIDE ---
-${styleGuide}
---- END STYLE GUIDE ---
-
-Please generate all the necessary files, including their full relative paths.
-For each file, use the following format exactly:
-
-# File: [file_path_1]
-\`\`\`[language]
-[code_for_file_1]
-\`\`\`
-
-# File: [file_path_2]
-\`\`\`[language]
-[code_for_file_2]
-\`\`\`
-
-Ensure the code is complete, functional, and follows best practices.
-`;
-
-            const response = await getResponse(prompt);
-            const filesToCreate = this.parseFileBlocks(response.content[0].text);
-
-            if (Object.keys(filesToCreate).length === 0) {
-                throw new Error("No files were generated. The AI may have misunderstood the request.");
-            }
-
-            spinner.text = `Creating ${Object.keys(filesToCreate).length} files...`;
-            for (const [filePath, code] of Object.entries(filesToCreate)) {
-                await FileManager.write(filePath, code);
-                ui.log(`✅ Created file: ${filePath}`);
-            }
-
-            spinner.succeed(`Successfully generated feature: ${featurePrompt}.`);
-            await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
-
-        } catch (error) {
-            spinner.fail("Error during multi-file generation.");
-            ui.log(`❌ Error generating feature: ${error.message}`);
-            console.error(error);
-        }
     },
 
     async saveFiles(originalFilePath, files) {
@@ -687,303 +580,6 @@ Return the content for each file in the following format:
         }
 
         return files;
-    },
-
-    async scaffold(scaffoldPrompt, projectStructure, ui) {
-        ui.log(`Scaffolding component based on prompt: "${scaffoldPrompt}"`);
-        const spinner = ora("Generating scaffold plan...").start();
-
-        try {
-            const prompt = `
-You are an expert code scaffolder. Based on the user's request and the existing project structure, determine the appropriate file path and generate the necessary boilerplate code.
-
-User Request: "${scaffoldPrompt}"
-
-Project Structure:
-${JSON.stringify(projectStructure, null, 2)}
-
-Please return your response as a single JSON object with two keys:
-1. "filePath": A string representing the new file's relative path (e.g., "src/components/NewComponent.js").
-2. "code": A string containing the complete, well-formed boilerplate code for the new file.
-
-Do not include any other text, explanations, or markdown formatting in your response.
-`;
-
-            const response = await getResponse(prompt);
-            const scaffoldPlan = JSON.parse(response.content[0].text);
-
-            if (!scaffoldPlan.filePath || !scaffoldPlan.code) {
-                throw new Error("Invalid scaffold plan received from AI. Missing filePath or code.");
-            }
-
-            spinner.text = `Creating file at ${scaffoldPlan.filePath}...`;
-            await FileManager.write(scaffoldPlan.filePath, scaffoldPlan.code);
-
-            spinner.succeed(`Successfully scaffolded ${scaffoldPlan.filePath}.`);
-            ui.log(`✅ New component created at ${scaffoldPlan.filePath}`);
-            await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
-
-        } catch (error) {
-            spinner.fail("Error during scaffolding.");
-            ui.log(`❌ Error scaffolding component: ${error.message}`);
-            console.error(error);
-        }
-    },
-
-    async refactorFile(filePath, refactorPrompt, projectStructure, ui) {
-        ui.log(`🤖 Applying refactoring to ${filePath}: "${refactorPrompt}"`);
-        const spinner = ora("Generating refactored code...").start();
-
-        try {
-            const originalCode = await FileManager.read(filePath);
-            const styleGuide = await this.analyzeProjectStyle(projectStructure, path.extname(filePath));
-
-            const prompt = `
-You are an expert code refactoring tool. Your task is to apply a specific refactoring to the given file.
-
-**User's Refactoring Request:**
-${refactorPrompt}
-
-**File to Refactor:**
-${filePath}
-
-**Original Code:**
-\`\`\`
-${originalCode}
-\`\`\`
-
-**Project Structure:**
-${JSON.stringify(projectStructure, null, 2)}
-
-**IMPORTANT: You MUST adhere to the following coding style guide to ensure consistency with the existing project.**
---- STYLE GUIDE ---
-${styleGuide}
---- END STYLE GUIDE ---
-
-Please provide the complete, refactored code for the file. Do not add any explanations, comments, or markdown formatting. Just return the raw code.
-`;
-
-            const response = await getResponse(prompt);
-            const refactoredCode = this.cleanGeneratedCode(response.content[0].text);
-
-            if (refactoredCode.trim() === originalCode.trim()) {
-                 spinner.info(`No changes were made to ${filePath}.`);
-                 return;
-            }
-
-            await FileManager.write(filePath, refactoredCode);
-
-            spinner.succeed(`Successfully refactored ${filePath}.`);
-            ui.log(`✅ Refactoring applied to ${filePath}`);
-            await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
-
-        } catch (error) {
-            spinner.fail("Error during refactoring.");
-            ui.log(`❌ Error refactoring file: ${error.message}`);
-            console.error(error);
-        }
-    },
-
-    async implementAlgorithm(algorithmPrompt, projectStructure, ui) {
-        ui.log(`🤖 Implementing algorithm: "${algorithmPrompt}"`);
-        const spinner = ora("Generating algorithm implementation...").start();
-
-        try {
-            const styleGuide = await this.analyzeProjectStyle(projectStructure, '.js'); // Assume JS for now
-
-            const prompt = `
-You are an expert algorithm engineer. Based on the user's request, generate a correct, efficient, and well-documented implementation of the specified algorithm.
-
-User Request: "${algorithmPrompt}"
-
-Project Structure:
-${JSON.stringify(projectStructure, null, 2)}
-
-**IMPORTANT: You MUST adhere to the following coding style guide to ensure consistency with the existing project.**
---- STYLE GUIDE ---
-${styleGuide}
---- END STYLE GUIDE ---
-
-Please determine a suitable file path and name for this algorithm (e.g., "src/algorithms/dijkstra.js") and provide the complete, runnable code.
-
-Return your response as a single JSON object with two keys:
-1. "filePath": A string representing the new file's relative path.
-2. "code": A string containing the complete, well-commented, and efficient code for the algorithm.
-
-Do not include any other text, explanations, or markdown formatting in your response.
-`;
-
-            const response = await getResponse(prompt);
-            const algorithmPlan = JSON.parse(response.content[0].text);
-
-            if (!algorithmPlan.filePath || !algorithmPlan.code) {
-                throw new Error("Invalid response from AI. Missing filePath or code.");
-            }
-
-            spinner.text = `Creating file at ${algorithmPlan.filePath}...`;
-            await FileManager.write(algorithmPlan.filePath, algorithmPlan.code);
-
-            spinner.succeed(`Successfully implemented algorithm in ${algorithmPlan.filePath}.`);
-            ui.log(`✅ New algorithm created at ${algorithmPlan.filePath}`);
-            await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
-
-        } catch (error) {
-            spinner.fail("Error during algorithm implementation.");
-            ui.log(`❌ Error implementing algorithm: ${error.message}`);
-            console.error(error);
-        }
-    },
-
-    async generateApiClient(specFilePath, projectStructure, ui) {
-        ui.log(`🤖 Generating API client from specification: "${specFilePath}"`);
-        const spinner = ora("Generating API client...").start();
-
-        try {
-            const specContent = await FileManager.read(specFilePath);
-            if (!specContent) {
-                throw new Error(`Could not read the API specification file at ${specFilePath}`);
-            }
-
-            const styleGuide = await this.analyzeProjectStyle(projectStructure, '.js'); // Assume JS for now
-
-            const prompt = `
-You are an expert API client generator. Based on the provided API specification, generate a complete client library to interact with the API.
-
-API Specification (${specFilePath}):
-\`\`\`json
-${specContent}
-\`\`\`
-
-Project Structure:
-${JSON.stringify(projectStructure, null, 2)}
-
-**IMPORTANT: You MUST adhere to the following coding style guide to ensure consistency with the existing project.**
---- STYLE GUIDE ---
-${styleGuide}
---- END STYLE GUIDE ---
-
-Please determine a suitable file path for the generated client library (e.g., "src/api/ApiClient.js") and provide the complete, runnable code. The client should include methods for each endpoint defined in the specification.
-
-Return your response as a single JSON object with two keys:
-1. "filePath": A string representing the new file's relative path.
-2. "code": A string containing the complete, well-commented code for the API client.
-
-Do not include any other text, explanations, or markdown formatting in your response.
-`;
-
-            const response = await getResponse(prompt);
-            const clientPlan = JSON.parse(response.content[0].text);
-
-            if (!clientPlan.filePath || !clientPlan.code) {
-                throw new Error("Invalid response from AI. Missing filePath or code for the API client.");
-            }
-
-            spinner.text = `Creating file at ${clientPlan.filePath}...`;
-            await FileManager.write(clientPlan.filePath, clientPlan.code);
-
-            spinner.succeed(`Successfully generated API client at ${clientPlan.filePath}.`);
-            ui.log(`✅ New API client created at ${clientPlan.filePath}`);
-            await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
-
-        } catch (error) {
-            spinner.fail("Error during API client generation.");
-            ui.log(`❌ Error generating API client: ${error.message}`);
-            console.error(error);
-        }
-    },
-
-    async generateSchema(schemaPrompt, projectStructure, ui) {
-        ui.log(`🤖 Generating database schema from prompt: "${schemaPrompt}"`);
-        const spinner = ora("Generating database schema...").start();
-
-        try {
-            const styleGuide = await this.analyzeProjectStyle(projectStructure, '.js'); // Assume JS for now
-
-            const prompt = `
-You are an expert database architect. Based on the user's request, generate a SQL schema or an ORM model definition (e.g., for Mongoose or Sequelize).
-
-User Request: "${schemaPrompt}"
-
-Project Structure:
-${JSON.stringify(projectStructure, null, 2)}
-
-**IMPORTANT: You MUST adhere to the following coding style guide to ensure consistency with the existing project.**
---- STYLE GUIDE ---
-${styleGuide}
---- END STYLE GUIDE ---
-
-Please determine a suitable file path and name for this schema (e.g., "src/models/User.js" or "db/migrations/001_create_users.sql") and provide the complete code.
-
-Return your response as a single JSON object with two keys:
-1. "filePath": A string representing the new file's relative path.
-2. "code": A string containing the complete, well-formed code for the schema or model.
-
-Do not include any other text, explanations, or markdown formatting in your response.
-`;
-
-            const response = await getResponse(prompt);
-            const schemaPlan = JSON.parse(response.content[0].text);
-
-            if (!schemaPlan.filePath || !schemaPlan.code) {
-                throw new Error("Invalid response from AI. Missing filePath or code for the schema.");
-            }
-
-            spinner.text = `Creating file at ${schemaPlan.filePath}...`;
-            await FileManager.write(schemaPlan.filePath, schemaPlan.code);
-
-            spinner.succeed(`Successfully generated schema at ${schemaPlan.filePath}.`);
-            ui.log(`✅ New schema/model created at ${schemaPlan.filePath}`);
-            await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
-
-        } catch (error) {
-            spinner.fail("Error during schema generation.");
-            ui.log(`❌ Error generating schema: ${error.message}`);
-            console.error(error);
-        }
-    },
-
-    async generateDockerfile(projectStructure, ui) {
-        ui.log("🐳 Generating Dockerfile...");
-        const spinner = ora("Analyzing project for Dockerfile generation...").start();
-
-        try {
-            const packageJsonContent = await FileManager.read('package.json');
-            const packageJson = packageJsonContent ? JSON.parse(packageJsonContent) : {};
-
-            const prompt = `
-You are an expert DevOps engineer. Based on the project structure and package.json, generate a complete and optimized multi-stage Dockerfile for this application.
-
-Project Structure:
-${JSON.stringify(projectStructure, null, 2)}
-
-package.json:
-${JSON.stringify(packageJson, null, 2)}
-
-Please generate a Dockerfile that:
-1.  Uses an appropriate base image for a Node.js application.
-2.  Implements a multi-stage build to keep the final image size small.
-3.  Correctly copies over package.json and package-lock.json and installs dependencies using 'npm ci'.
-4.  Copies the rest of the application source code.
-5.  Sets a non-root user for security.
-6.  Specifies the correct command to run the application (e.g., 'npm start').
-
-Return only the raw, complete code for the Dockerfile. Do not include any explanations, comments, or markdown formatting.
-`;
-
-            const response = await getResponse(prompt);
-            const dockerfileContent = this.cleanGeneratedCode(response.content[0].text);
-
-            await FileManager.write('Dockerfile', dockerfileContent);
-
-            spinner.succeed("Successfully generated Dockerfile.");
-            ui.log(`✅ Dockerfile created in the project root.`);
-            await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
-
-        } catch (error) {
-            spinner.fail("Error during Dockerfile generation.");
-            ui.log(`❌ Error generating Dockerfile: ${error.message}`);
-            console.error(error);
-        }
     },
 };
 

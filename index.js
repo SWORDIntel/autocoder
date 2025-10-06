@@ -10,7 +10,7 @@ import CodeGenerator from "./codeGenerator.js";
 
 const tui = new TUI();
 
-async function runWatchMode() {
+export async function runWatchMode() {
     console.log(chalk.blue("👀 Running in watch mode..."));
     const readmePath = path.join(process.cwd(), "README.md");
 
@@ -32,7 +32,6 @@ async function runWatchMode() {
 
             const projectStructure = await FileManager.getProjectStructure();
             const filesToProcess = await FileManager.getFilesToProcess();
-            // Corrected to use the 'tui' instance
             await tui.processFiles(filesToProcess, readme, projectStructure);
 
             console.log(chalk.green("✅ Automated refactoring complete. Watching for new changes..."));
@@ -42,10 +41,12 @@ async function runWatchMode() {
         }
     });
 
-    return new Promise(() => {});
+    if (process.env.JEST_WORKER_ID === undefined) {
+        return new Promise(() => {});
+    }
 }
 
-async function runAutomatedMode(model, apiKey) {
+export async function runAutomatedMode(model, apiKey) {
     try {
         console.log(chalk.blue("🚀 Running in automated mode..."));
         const readmePath = path.join(process.cwd(), "README.md");
@@ -75,7 +76,7 @@ async function runAutomatedMode(model, apiKey) {
     }
 }
 
-async function main() {
+export async function main() {
     const args = process.argv.slice(2);
 
     if (args.includes("--watch")) {
@@ -87,20 +88,21 @@ async function main() {
         const model = args[1];
         const apiKey = args[2];
         await runAutomatedMode(model, apiKey);
-        return; // Exit after automated run
+        return;
     }
 
-    // Start the TUI by default
     await tui.init();
-    // Keep the process alive for the TUI
-    return new Promise(() => {});
+    if (process.env.JEST_WORKER_ID === undefined) {
+        return new Promise(() => {});
+    }
 }
 
-main().catch((error) => {
-    // Ensure the screen is restored on crash
-    if (tui.screen) {
-        tui.screen.destroy();
-    }
-    console.error(chalk.red("❌ An error occurred:"), error);
-    process.exit(1);
-});
+if (process.env.JEST_WORKER_ID === undefined) {
+    main().catch((error) => {
+        if (tui.screen) {
+            tui.screen.destroy();
+        }
+        console.error(chalk.red("❌ An error occurred:"), error);
+        process.exit(1);
+    });
+}
