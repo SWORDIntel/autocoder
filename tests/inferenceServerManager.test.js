@@ -18,12 +18,14 @@ describe('InferenceServerManager', () => {
     mockSpawn = jest.fn().mockReturnValue(mockServerProcess);
 
     const mockHardwareReport = {
-        openvino: {
-            priority_list: ['NPU', 'GPU', 'CPU']
-        }
+      compiler_flags: {
+        environment: ['OPENVINO_HETERO_PRIORITY=NPU,GPU,CPU'],
+      },
     };
-    mockExecFile = jest.fn((command, args, callback) => {
-        callback(null, { stdout: JSON.stringify(mockHardwareReport) });
+
+    mockExecFile = jest.fn((command, args, options, callback) => {
+        const cb = typeof options === 'function' ? options : callback;
+        cb(null, { stdout: JSON.stringify(mockHardwareReport) });
     });
 
     jest.unstable_mockModule('child_process', () => ({
