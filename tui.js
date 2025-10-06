@@ -1,11 +1,11 @@
 import blessed from 'blessed';
 import path from 'path';
-import os from 'os';
 import fs from 'fs/promises';
 import CodeAnalyzer from './codeAnalyzer.js';
 import FileManager from './fileManager.js';
 import CodeGenerator from './codeGenerator.js';
 import DocumentationGenerator from './documentationGenerator.js';
+import settingsManager from './settingsManager.js';
 
 class TUI {
     constructor() {
@@ -310,8 +310,12 @@ class TUI {
 
     async promptForModel() {
         const models = [
-            "claude-sonnet-4-20250514", "o3-mini", "o4-mini", "gemini-2.0-flash-thinking-exp-01-21",
-            "gemini-2.5-flash-preview-05-20", "gemini-2.5-pro-preview-06-05"
+            "claude-3.5-sonnet-20240620",
+            "claude-3-opus-20240229",
+            "o4-mini",
+            "gemini-1.5-pro-latest",
+            "deepseek-coder",
+            "openvino_local"
         ];
 
         const list = blessed.list({
@@ -323,33 +327,14 @@ class TUI {
 
         list.on('select', async (item) => {
             const model = item.getContent();
-            await this.setModel(model);
+            await settingsManager.set('model', model);
+            this.log(`✅ Model set to ${model}`);
             list.destroy();
             this.screen.render();
         });
 
         list.focus();
         this.screen.render();
-    }
-
-    async setModel(model) {
-        try {
-            const settingsPath = path.join(os.homedir(), ".settings.json");
-            let settings = {};
-            try {
-                const currentSettings = await fs.readFile(settingsPath, "utf8");
-                settings = JSON.parse(currentSettings);
-            } catch (error) {
-                if (error.code !== 'ENOENT') {
-                    this.log(`⚠️  Could not read settings file: ${error.message}`);
-                }
-            }
-            settings.model = model;
-            await FileManager.write(settingsPath, JSON.stringify(settings, null, 2));
-            this.log(`✅ Model set to ${model}`);
-        } catch (error) {
-            this.log(`❌ Error setting model: ${error.message}`);
-        }
     }
 
     log(message) {
