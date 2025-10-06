@@ -12,7 +12,7 @@ import { getResponse } from "./model.js";
 const DEFAULT_MAX_NEW_TOKENS = 4096;
 
 const CodeGenerator = {
-    async generate(readme, currentCode, fileName, projectStructure, allFileContents, model, apiKey) {
+    async generate(readme, currentCode, fileName, projectStructure, allFileContents) {
         const fileExtension = path.extname(fileName);
         const language = this.getLanguageFromExtension(fileExtension);
         const languageConfig = CONFIG.languageConfigs[language];
@@ -47,7 +47,7 @@ Please generate or update the ${fileName} file to implement the features describ
         const spinner = ora("Generating code...").start();
 
         try {
-            const response = await getResponse(prompt, model, apiKey, DEFAULT_MAX_NEW_TOKENS);
+            const response = await getResponse(prompt, undefined, DEFAULT_MAX_NEW_TOKENS);
             spinner.succeed("Code generated successfully");
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             return this.cleanGeneratedCode(response.content[0].text);
@@ -64,7 +64,7 @@ Please generate or update the ${fileName} file to implement the features describ
         return match ? match[1] : code;
     },
 
-    async updateReadme(readme, projectStructure, model, apiKey) {
+    async updateReadme(readme, projectStructure) {
         const prompt = `
 You are AutoCode, an automatic coding tool. Your task is to update the README.md file with new design ideas and considerations based on the current content and project structure.
 
@@ -80,7 +80,7 @@ Please update the README.md file with new design ideas and considerations. Ensur
         const spinner = ora("Updating README...").start();
 
         try {
-            const response = await getResponse(prompt, model, apiKey, DEFAULT_MAX_NEW_TOKENS);
+            const response = await getResponse(prompt, undefined, DEFAULT_MAX_NEW_TOKENS);
             spinner.succeed("README updated successfully");
             const updatedReadme = this.cleanGeneratedCode(response.content[0].text);
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);

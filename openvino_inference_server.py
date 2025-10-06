@@ -1,162 +1,108 @@
 import argparse
 import os
 import json
-import subprocess
 import sys
 from flask import Flask, request, jsonify
 from openvino_genai import LLMPipeline
 
-# Globals
+# --- Globals ---
 app = Flask(__name__)
-pipeline = None
-model_path_g = None
-device_g = None
+# Use a dictionary to cache loaded pipelines, keyed by model_path
+pipelines = {}
+# Global variable to store the prioritized device list from startup arguments
+device_list_g = "CPU"
 
-def set_performance_env_vars(device_list):
+def set_performance_env_vars(devices):
     """Sets environment variables for performance tuning based on the device list."""
-    print("--- Setting Performance Environment Variables ---")
+    print(f"--- Setting Performance Environment Variables for devices: {devices} ---")
 
-    # Set HETERO priority
-    hetero_priority = ",".join(device_list)
+    # Set HETERO device priority. This is the primary mechanism for controlling it.
+    hetero_priority = ",".join(devices)
     os.environ["OPENVINO_HETERO_PRIORITY"] = hetero_priority
     print(f"✅ Set OPENVINO_HETERO_PRIORITY={hetero_priority}")
 
-    # Tune thread counts for CPU
-    if 'CPU' in device_list:
+    # Tune thread counts for CPU if it's in the list
+    if 'CPU' in devices:
         cpu_cores = os.cpu_count() or 1
         os.environ["OMP_NUM_THREADS"] = str(cpu_cores)
         os.environ["MKL_NUM_THREADS"] = str(cpu_cores)
         print(f"✅ Set OMP_NUM_THREADS and MKL_NUM_THREADS to {cpu_cores} for CPU.")
 
-    # Set oneDNN primitive cache for performance
-    os.environ["ONEDNN_MAX_CPU_ISA"] = "AVX512_CORE_VNNI" # Assuming modern Intel CPU
+    # Set oneDNN primitive cache for performance, assuming a modern Intel CPU
+    os.environ["ONEDNN_MAX_CPU_ISA"] = "AVX512_CORE_VNNI"
     os.environ["TBB_MALLOC_USE_HUGE_PAGES"] = "1"
     print("✅ Set oneDNN and TBB performance hints.")
 
-def initialize_pipeline():
-    """Initializes the OpenVINO LLM pipeline with intelligent device targeting."""
-    global pipeline, device_g
-    print("--- Initializing OpenVINO LLM Pipeline ---")
+def get_pipeline(model_path):
+    """
+    Loads or retrieves a cached LLM pipeline using the HETERO device
+    for optimal performance across the prioritized hardware list.
+    """
+    # The device is now determined by the global HETERO configuration
+    device = "HETERO"
 
-    if not model_path_g or not os.path.isdir(model_path_g):
-        print(f"❌ FATAL: The provided model path is not a directory: '{model_path_g}'")
-        return False
+    # Cache key can be simple as the model path, since device is always HETERO
+    cache_key = model_path
+    if cache_key in pipelines:
+        return pipelines[cache_key]
 
-    print(f"Model Path: {model_path_g}")
+    print(f"--- Initializing new pipeline for model: {model_path} on device: {device} ---")
 
-    devices = [d.strip().upper() for d in device_g.split(',')]
-    print(f"Device Priority: {devices}")
+    if not os.path.isdir(model_path):
+        print(f"❌ FATAL: The provided model path is not a directory: '{model_path}'")
+        return None
 
-    set_performance_env_vars(devices)
-
-    for device in devices:
-        print(f"➡️  Attempting to initialize on device: {device}...")
-        try:
-            pipeline = LLMPipeline(model_path_g, device)
-            print(f"✅ LLMPipeline initialized successfully on {device}.")
-            device_g = device  # Set the successfully initialized device globally
-            return True
-        except Exception as e:
-            print(f"🟡 WARN: Failed to initialize on device {device}. Error: {e}")
-
-    print(f"❌ FATAL: Could not initialize pipeline on any of the specified devices: {devices}")
-    pipeline = None
-    return False
-
-@app.route('/', methods=['GET'])
-def index():
-    """A simple welcome message to confirm the server is running."""
-    return jsonify({
-        "message": "Welcome to the OpenVINO Local Inference Server!",
-        "endpoints": {
-            "/generate": "POST, for text generation",
-            "/hardware": "GET, for hardware analysis",
-            "/health": "GET, for health check"
-        }
-    })
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """A simple health check endpoint."""
-    if pipeline:
-        return jsonify({"status": "ok", "pipeline_initialized": True, "device": device_g}), 200
-    else:
-        return jsonify({"status": "error", "pipeline_initialized": False, "message": "LLM pipeline is not initialized."}), 503
-
-@app.route('/hardware', methods=['GET'])
-def get_hardware_info():
-    """Executes the hardware analyzer script and returns its JSON output."""
-    print("--- Running Hardware Analysis ---")
     try:
-        # Execute the hardware_analyzer.py script with the --json flag
-        result = subprocess.run(
-            ['python3', 'hardware_analyzer.py', '--json'],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        hardware_data = json.loads(result.stdout)
-        print("✅ Hardware analysis complete.")
-        return jsonify(hardware_data)
-    except FileNotFoundError:
-        print("❌ ERROR: 'hardware_analyzer.py' not found.")
-        return jsonify({"error": "Hardware analyzer script not found."}), 500
-    except subprocess.CalledProcessError as e:
-        print(f"❌ ERROR: Hardware analyzer script failed with exit code {e.returncode}.")
-        print(f"Stderr: {e.stderr}")
-        return jsonify({"error": "Failed to execute hardware analyzer.", "details": e.stderr}), 500
-    except json.JSONDecodeError:
-        print("❌ ERROR: Failed to parse JSON from hardware analyzer script.")
-        return jsonify({"error": "Failed to parse hardware analyzer output."}), 500
+        # HETERO device will automatically use the devices specified in the
+        # OPENVINO_HETERO_PRIORITY environment variable set at startup.
+        pipeline = LLMPipeline(model_path, device)
+        pipelines[cache_key] = pipeline
+        print(f"✅ Pipeline for {os.path.basename(model_path)} initialized successfully on {device}:{os.environ['OPENVINO_HETERO_PRIORITY']}.")
+        return pipeline
     except Exception as e:
-        print(f"❌ ERROR: An unexpected error occurred during hardware analysis: {e}")
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+        print(f"❌ FATAL: Could not initialize HETERO pipeline for model {model_path}. Error: {e}")
+        return None
 
 @app.route('/generate', methods=['POST'])
 def generate():
     """Handle inference requests."""
-    print("--- Received Generation Request ---")
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON in request body"}), 400
+
+    prompt = data.get('prompt')
+    model_path = data.get('model_path')
+    max_new_tokens = data.get('max_new_tokens', 1024)
+
+    if not prompt or not model_path:
+        return jsonify({"error": "Missing 'prompt' or 'model_path' in request body"}), 400
+
+    pipeline = get_pipeline(model_path)
     if not pipeline:
-        print("❌ ERROR: LLMPipeline not initialized.")
-        return jsonify({"error": "LLMPipeline not initialized. Check server logs."}), 500
+        return jsonify({"error": f"Failed to load model pipeline for path: {model_path}"}), 500
 
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-
-        prompt = data.get('prompt')
-        max_new_tokens = data.get('max_new_tokens', 100)
-
-        if not prompt:
-            print("❌ ERROR: Missing 'prompt' in request.")
-            return jsonify({"error": "Missing 'prompt' in request body"}), 400
-
-        print(f"Prompt received. Max new tokens: {max_new_tokens}")
         generated_text = pipeline(prompt, max_new_tokens=max_new_tokens)
-        print("✅ Successfully generated text.")
-
         return jsonify({"generated_text": generated_text})
-
     except Exception as e:
-        print(f"❌ ERROR: An error occurred during text generation: {e}")
         return jsonify({"error": f"An error occurred during text generation: {str(e)}"}), 500
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    """A simple health check endpoint."""
+    return jsonify({"status": "ok", "message": "OpenVINO inference server is running."}), 200
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="OpenVINO Local Inference Server with Hardware Analysis and Intelligent Device Targeting")
-    parser.add_argument('--model-path', type=str, required=True, help='Path to the OpenVINO IR model directory.')
-    parser.add_argument('--device', type=str, default='NPU,GPU,CPU', help='Comma-separated list of devices for inference priority (e.g., NPU,GPU,CPU).')
+    parser = argparse.ArgumentParser(description="Local OpenVINO Inference Server with Dynamic Hardware Selection")
     parser.add_argument('--port', type=int, default=5001, help='Port to run the server on.')
+    parser.add_argument('--device', type=str, default='CPU', help='Comma-separated list of devices for inference priority (e.g., NPU,GPU,CPU).')
     args = parser.parse_args()
 
-    model_path_g = args.model_path
-    device_g = args.device
+    device_list_g = [d.strip().upper() for d in args.device.split(',')]
 
-    # Initialize the pipeline at startup
-    if not initialize_pipeline():
-        print("\n❌ Server cannot start because the LLM pipeline failed to initialize.")
-        print("   Please check the model path, device availability, and ensure model files are correct.")
-        sys.exit(1)
+    # Set performance environment variables at startup
+    set_performance_env_vars(device_list_g)
 
-    print(f"🚀 Starting server on http://0.0.0.0:{args.port} using device {device_g}")
+    print(f"🚀 Starting OpenVINO server on http://0.0.0.0:{args.port}")
+    print(f"🔥 Using HETERO device with priority: {','.join(device_list_g)}")
     app.run(host='0.0.0.0', port=args.port)
