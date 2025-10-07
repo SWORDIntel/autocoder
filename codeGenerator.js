@@ -2,11 +2,12 @@ import { CONFIG } from "./config.js";
 import chalk from "chalk";
 import path from "path";
 import FileManager from "./fileManager.js";
-import ora from "ora";
+import logger from "./logger.js";
 import CodeAnalyzer from "./codeAnalyzer.js";
 import DocumentationGenerator from "./documentationGenerator.js";
 import fs from "fs/promises";
 import { getResponse } from "./model.js";
+import UserInterface from "./userInterface.js";
 
 const DEFAULT_MAX_NEW_TOKENS = 4096;
 
@@ -43,15 +44,14 @@ Package manager: ${languageConfig.packageManager}
 Please generate or update the ${fileName} file to implement the features described in the README. Ensure the code is complete, functional, and follows best practices for ${language}. Consider the project structure and the content of other selected files when making changes or adding new features. Reuse functionality from other modules and avoid duplicating code. Do not include any explanations or comments in your response, just provide the code.
 `;
 
-        const spinner = ora("Generating code...").start();
-
+        logger.log("Generating code...");
         try {
             const response = await getResponse(prompt, undefined, DEFAULT_MAX_NEW_TOKENS);
-            spinner.succeed("Code generated successfully");
+            logger.log("Code generated successfully");
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             return this.cleanGeneratedCode(response.content[0].text);
         } catch (error) {
-            spinner.fail("Error generating code");
+            logger.error("Error generating code", error);
             throw error;
         }
     },
@@ -76,22 +76,21 @@ ${JSON.stringify(projectStructure, null, 2)}
 Please update the README.md file with new design ideas and considerations. Ensure the content is well-structured and follows best practices. Consider the current project structure when suggesting improvements or new features. Do not include any explanations or comments in your response, just provide the updated README.md content.
 `;
 
-        const spinner = ora("Updating README...").start();
-
+        logger.log("Updating README...");
         try {
             const response = await getResponse(prompt, undefined, DEFAULT_MAX_NEW_TOKENS);
-            spinner.succeed("README updated successfully");
+            logger.log("README updated successfully");
             const updatedReadme = this.cleanGeneratedCode(response.content[0].text);
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             return updatedReadme;
         } catch (error) {
-            spinner.fail("Error updating README");
+            logger.error("Error updating README", error);
             throw error;
         }
     },
 
     async splitLargeFile(filePath, content, projectStructure) {
-        console.log(chalk.yellow(`📂 File ${filePath} exceeds ${CONFIG.maxFileLines} lines. Splitting...`));
+        logger.log(chalk.yellow(`📂 File ${filePath} exceeds ${CONFIG.maxFileLines} lines. Splitting...`));
 
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -127,16 +126,15 @@ Please provide your suggestions in the following Markdown format:
 ... (repeat for all new files)
 `;
 
-        const spinner = ora("Generating file split suggestion...").start();
-
+        logger.log("Generating file split suggestion...");
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            spinner.succeed("File split suggestion generated");
+            logger.log("File split suggestion generated");
             const splitSuggestion = response.content[0].text;
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             return splitSuggestion;
         } catch (error) {
-            spinner.fail("Error generating file split suggestion");
+            logger.error("Error generating file split suggestion", error);
             throw error;
         }
     },
@@ -161,12 +159,12 @@ Please provide your suggestions in the following Markdown format:
             const filePath =
                 fileName === path.basename(originalFilePath) ? originalFilePath : path.join(originalDir, fileName);
             await FileManager.write(filePath, this.cleanGeneratedCode(content));
-            console.log(chalk.green(`✅ Saved file: ${filePath}`));
+            logger.log(chalk.green(`✅ Saved file: ${filePath}`));
         }
     },
 
     async optimizeAndRefactorFile(filePath, projectStructure) {
-        console.log(chalk.cyan(`🔄 Optimizing and refactoring ${filePath}...`));
+        logger.log(chalk.cyan(`🔄 Optimizing and refactoring ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -199,17 +197,16 @@ Focus on:
 Return the optimized and refactored code ONLY!! without explanations or comments or md formatting. Do not include any explanations or comments in your response, just provide the code.
 `;
 
-        const spinner = ora("Optimizing and refactoring...").start();
-
+        logger.log("Optimizing and refactoring...");
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            spinner.succeed("Optimization and refactoring completed");
+            logger.log("Optimization and refactoring completed");
             const optimizedCode = this.cleanGeneratedCode(response.content[0].text);
             await FileManager.write(filePath, optimizedCode);
-            console.log(chalk.green(`✅ ${filePath} has been optimized and refactored.`));
+            logger.log(chalk.green(`✅ ${filePath} has been optimized and refactored.`));
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Error optimizing and refactoring");
+            logger.error("Error optimizing and refactoring", error);
             throw error;
         }
     },
@@ -262,11 +259,11 @@ Return the optimized and refactored code ONLY!! without explanations or comments
                 dependencyFileName = "pubspec.yaml";
                 break;
             default:
-                console.log(chalk.red(`Unsupported package manager: ${languageConfig.packageManager}`));
+                logger.log(chalk.red(`Unsupported package manager: ${languageConfig.packageManager}`));
                 return;
         }
 
-        console.log(chalk.cyan(`📦 Generating ${dependencyFileName} for ${language}...`));
+        logger.log(chalk.cyan(`📦 Generating ${dependencyFileName} for ${language}...`));
 
         const prompt = `
 Please generate a ${dependencyFileName} file for a ${language} project with the following structure:
@@ -281,23 +278,22 @@ Include all necessary dependencies based on the project structure and features d
 Return the content of the ${dependencyFileName} file without explanations or comments. Do not include any explanations or comments in your response, just provide the code.
 `;
 
-        const spinner = ora(`Generating ${dependencyFileName}...`).start();
-
+        logger.log(`Generating ${dependencyFileName}...`);
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            spinner.succeed(`${dependencyFileName} generated successfully`);
+            logger.log(`${dependencyFileName} generated successfully`);
             const dependencyFileContent = this.cleanGeneratedCode(response.content[0].text);
             await FileManager.write(dependencyFileName, dependencyFileContent);
-            console.log(chalk.green(`✅ Generated ${dependencyFileName}`));
+            logger.log(chalk.green(`✅ Generated ${dependencyFileName}`));
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail(`Error generating ${dependencyFileName}`);
+            logger.error(`Error generating ${dependencyFileName}`, error);
             throw error;
         }
     },
 
     async generateAIAgentCode(agentType, agentDescription, projectStructure, readme) {
-        console.log(chalk.cyan(`🤖 Generating AI agent code for ${agentType}...`));
+        logger.log(chalk.cyan(`🤖 Generating AI agent code for ${agentType}...`));
 
         const fileManagerContent = await FileManager.read("fileManager.js");
         const userInterfaceContent = await FileManager.read("userInterface.js");
@@ -328,24 +324,23 @@ Ensure the code is complete, functional, and follows best practices for JavaScri
 Return the generated code for the ${agentType} AI agent without explanations or comments. Do not include any explanations or comments in your response, just provide the code.
 `;
 
-        const spinner = ora(`Generating ${agentType} AI agent code...`).start();
-
+        logger.log(`Generating ${agentType} AI agent code...`);
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            spinner.succeed(`${agentType} AI agent code generated successfully`);
+            logger.log(`${agentType} AI agent code generated successfully`);
             const agentCode = this.cleanGeneratedCode(response.content[0].text);
             const fileName = `./${agentType.replace(/\s+/g, "")}.js`;
             await FileManager.write(fileName, agentCode);
-            console.log(chalk.green(`✅ Generated ${fileName}`));
+            logger.log(chalk.green(`✅ Generated ${fileName}`));
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail(`Error generating ${agentType} AI agent code`);
+            logger.error(`Error generating ${agentType} AI agent code`, error);
             throw error;
         }
     },
 
     async generateLandingPage(projectStructure, readme) {
-        console.log(chalk.cyan("🌐 Generating landing page..."));
+        logger.log(chalk.cyan("🌐 Generating landing page..."));
 
         const prompt = `
 Please generate an HTML file for a landing page based on the project structure and features described in the README.md. The landing page should showcase the key features of the project and provide a visually appealing introduction.
@@ -365,24 +360,23 @@ Use the following design guidelines:
 Return the generated HTML code for the landing page without explanations or comments.
 `;
 
-        const spinner = ora("Generating landing page...").start();
-
+        logger.log("Generating landing page...");
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            spinner.succeed("Landing page generated successfully");
+            logger.log("Landing page generated successfully");
             const landingPageCode = this.cleanGeneratedCode(response.content[0].text);
             const fileName = "landing.html";
             await FileManager.write(fileName, landingPageCode);
-            console.log(chalk.green(`✅ Generated ${fileName}`));
+            logger.log(chalk.green(`✅ Generated ${fileName}`));
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Error generating landing page");
+            logger.error("Error generating landing page", error);
             throw error;
         }
     },
 
     async generateFullProject(projectStructure, readme) {
-        console.log(chalk.cyan("🚀 Generating full project..."));
+        logger.log(chalk.cyan("🚀 Generating full project..."));
 
         const { language } = await UserInterface.promptForLanguage();
         await this.generateDependencyFile(language, projectStructure, readme);
@@ -399,7 +393,7 @@ Return the generated HTML code for the landing page without explanations or comm
             if (languageConfig) {
                 const content = await this.generate(readme, "", file, projectStructure, {});
                 await FileManager.write(file, content);
-                console.log(chalk.green(`✅ Generated ${file}`));
+                logger.log(chalk.green(`✅ Generated ${file}`));
 
                 await CodeAnalyzer.runLintChecks(file);
                 await DocumentationGenerator.generate(file, content, projectStructure);
@@ -410,18 +404,18 @@ Return the generated HTML code for the landing page without explanations or comm
         await this.generateLandingPage(projectStructure, readme);
         await DocumentationGenerator.generateProjectDocumentation(projectStructure);
 
-        console.log(chalk.green("✅ Full project generated successfully"));
+        logger.log(chalk.green("✅ Full project generated successfully"));
     },
 
     async createMissingSourceFile(projectStructure, readme) {
-        console.log(chalk.cyan("🔍 Checking for missing source files..."));
+        logger.log(chalk.cyan("🔍 Checking for missing source files..."));
 
         const sourceFiles = Object.keys(projectStructure).filter(
             (file) => file.endsWith(".js") && !file.startsWith("server/") && file !== "index.js"
         );
 
         if (sourceFiles.length === 0) {
-            console.log(chalk.yellow("No source files found. Creating a new one..."));
+            logger.log(chalk.yellow("No source files found. Creating a new one..."));
 
             const fileName = "app.js";
             const prompt = `
@@ -438,22 +432,21 @@ Ensure the code is complete, functional, and follows best practices for JavaScri
 Return the generated code for ${fileName} without explanations or comments.
 `;
 
-            const spinner = ora(`Generating ${fileName}...`).start();
-
+            logger.log(`Generating ${fileName}...`);
             try {
                 const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-                spinner.succeed(`${fileName} generated successfully`);
+                logger.log(`${fileName} generated successfully`);
                 const sourceFileContent = this.cleanGeneratedCode(response.content[0].text);
                 await FileManager.write(fileName, sourceFileContent);
-                console.log(chalk.green(`✅ Generated ${fileName}`));
+                logger.log(chalk.green(`✅ Generated ${fileName}`));
                 projectStructure[fileName] = null;
                 await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             } catch (error) {
-                spinner.fail(`Error generating ${fileName}`);
+                logger.error(`Error generating ${fileName}`, error);
                 throw error;
             }
         } else {
-            console.log(chalk.green("✅ Source files already exist. No need to create a new one."));
+            logger.log(chalk.green("✅ Source files already exist. No need to create a new one."));
         }
     },
 
@@ -465,7 +458,7 @@ Return the generated code for ${fileName} without explanations or comments.
         const outputCost = (outputTokens / 1000000) * 15;
         const totalCost = inputCost + outputCost;
 
-        console.log(
+        logger.log(
             chalk.cyan(
                 `📊 Token Statistics: Input: ${inputTokens}, Output: ${outputTokens}, Cost: ${chalk.yellow(
                     `$${totalCost.toFixed(2)}`
@@ -481,7 +474,7 @@ Return the generated code for ${fileName} without explanations or comments.
         try {
             changelog = await fs.readFile(changelogPath, "utf-8");
         } catch {
-            console.log(chalk.yellow("CHANGELOG.md not found. Creating a new one."));
+            logger.log(chalk.yellow("CHANGELOG.md not found. Creating a new one."));
         }
 
         const currentDate = new Date().toISOString().split("T")[0];
@@ -495,11 +488,11 @@ ${changes.map((change) => `- ${change}`).join("\n")}
         changelog = newEntry + changelog;
 
         await fs.writeFile(changelogPath, changelog);
-        console.log(chalk.green("✅ CHANGELOG.md updated successfully"));
+        logger.log(chalk.green("✅ CHANGELOG.md updated successfully"));
     },
 
     async createAppDescriptionFiles(projectStructure, readme) {
-        console.log(chalk.cyan("📝 Creating app description and metadata files..."));
+        logger.log(chalk.cyan("📝 Creating app description and metadata files..."));
 
         const prompt = `
 Please generate the following app description and metadata files for both Google Play Store and Apple App Store:
@@ -532,21 +525,20 @@ Return the content for each file in the following format:
 ...and so on for all files.
 `;
 
-        const spinner = ora("Generating app description and metadata files...").start();
-
+        logger.log("Generating app description and metadata files...");
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            spinner.succeed("App description and metadata files generated successfully");
+            logger.log("App description and metadata files generated successfully");
 
             const files = this.parseGeneratedFiles(response.content[0].text);
             for (const [fileName, content] of Object.entries(files)) {
                 await FileManager.write(`docs/${fileName}`, content);
-                console.log(chalk.green(`✅ Generated docs/${fileName}`));
+                logger.log(chalk.green(`✅ Generated docs/${fileName}`));
             }
 
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Error generating app description and metadata files");
+            logger.error("Error generating app description and metadata files", error);
             throw error;
         }
     },

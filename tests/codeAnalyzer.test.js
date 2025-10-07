@@ -28,6 +28,13 @@ jest.unstable_mockModule('../codeGenerator.js', () => ({
     }
 }));
 
+jest.unstable_mockModule('../logger.js', () => ({
+  default: {
+    log: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 jest.unstable_mockModule('../server/memoryManager.js', () => ({
   default: {
     connect: jest.fn().mockResolvedValue(),
@@ -52,12 +59,11 @@ const { getResponse } = await import('../model.js');
 const { exec } = await import('child_process');
 const FileManager = (await import('../fileManager.js')).default;
 const MemoryManager = (await import('../server/memoryManager.js')).default;
+const logger = (await import('../logger.js')).default;
 
 describe('CodeAnalyzer', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-    jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -65,23 +71,21 @@ describe('CodeAnalyzer', () => {
   });
 
   describe('runLintChecks', () => {
-    const mockUi = { log: jest.fn() };
-
     it('should run lint checks successfully for a supported language', async () => {
-      await CodeAnalyzer.runLintChecks('test.js', mockUi);
+      await CodeAnalyzer.runLintChecks('test.js');
       expect(exec).toHaveBeenCalledWith('npx eslint test.js', expect.any(Object), expect.any(Function));
-      expect(mockUi.log).toHaveBeenCalledWith('✅ eslint passed for test.js');
+      expect(logger.log).toHaveBeenCalledWith('✅ eslint passed for test.js');
     });
 
     it('should handle lint checks with errors', async () => {
       exec.mockImplementation((cmd, opts, cb) => cb({ message: 'Lint Error' }, { stdout: '', stderr: 'Error: Missing semicolon.' }));
-      await CodeAnalyzer.runLintChecks('test.js', mockUi);
-      expect(mockUi.log).toHaveBeenCalledWith('❌ Error running eslint: Lint Error');
+      await CodeAnalyzer.runLintChecks('test.js');
+      expect(logger.log).toHaveBeenCalledWith('❌ Error running eslint: Lint Error');
     });
 
     it('should log a warning for unsupported file types', async () => {
-        await CodeAnalyzer.runLintChecks('test.txt', mockUi);
-        expect(mockUi.log).toHaveBeenCalledWith('⚠️ No linter configured for file extension: .txt');
+        await CodeAnalyzer.runLintChecks('test.txt');
+        expect(logger.log).toHaveBeenCalledWith('⚠️ No linter configured for file extension: .txt');
         expect(exec).not.toHaveBeenCalled();
     });
   });
@@ -111,13 +115,10 @@ describe('CodeAnalyzer', () => {
         FileManager.read.mockResolvedValueOnce(null);
         const result = await CodeAnalyzer.analyzeCodeQuality('nonexistent.js');
 
-        // The current implementation proceeds even if the file read fails.
-        // The prompt will contain "null" for the file content, but the language should still be detected from the extension.
         expect(getResponse).toHaveBeenCalled();
         const prompt = getResponse.mock.calls[0][0];
         expect(prompt).toContain('Analyze the following javascript code for quality and provide improvement suggestions:\nnull');
 
-        // The result will contain the mocked analysis and null file content
         expect(result.analysis).toBe('Mocked AI analysis');
         expect(result.fileContent).toBeNull();
     });
