@@ -5,9 +5,8 @@ import { CONFIG } from "./config.js";
 import FileManager from "./fileManager.js";
 import CodeGenerator from "./codeGenerator.js";
 import path from "path";
-import inquirer from "inquirer";
-import ora from "ora";
 import fs from "fs/promises";
+import logger from "./logger.js";
 import { getResponse } from "./model.js";
 import MemoryManager from "./server/memoryManager.js";
 
@@ -38,45 +37,45 @@ const CodeAnalyzer = {
             return `✅ Memory successfully recorded for ${file}.`;
         } catch (error) {
             // Log the full error for debugging but return a user-friendly message
-            console.error(chalk.red(`❌ An error occurred during memory recording for ${file}:`), error);
+            logger.error(chalk.red(`❌ An error occurred during memory recording for ${file}:`), error);
             return `❌ Error recording memory: ${error.message}`;
         } finally {
             await MemoryManager.disconnect();
         }
     },
 
-    async runLintChecks(filePath, ui) {
-        ui.log(`🔍 Running code quality checks for ${filePath}...`);
+    async runLintChecks(filePath) {
+        logger.log(`🔍 Running code quality checks for ${filePath}...`);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
 
         const languageConfig = CONFIG.languageConfigs[language];
 
         if (!languageConfig || !languageConfig.linter) {
-            ui.log(`⚠️ No linter configured for file extension: ${fileExtension}`);
+            logger.log(`⚠️ No linter configured for file extension: ${fileExtension}`);
             return "";
         }
 
         const linter = languageConfig.linter;
         try {
             const { stdout, stderr } = await execAsync(`npx ${linter} ${filePath}`, { encoding: "utf8" });
-            if (stdout) ui.log(`⚠️ ${linter} warnings:\n${stdout}`);
-            if (stderr) ui.log(`❌ ${linter} errors:\n${stderr}`);
-            if (!stdout && !stderr) ui.log(`✅ ${linter} passed for ${filePath}`);
+            if (stdout) logger.log(`⚠️ ${linter} warnings:\n${stdout}`);
+            if (stderr) logger.log(`❌ ${linter} errors:\n${stderr}`);
+            if (!stdout && !stderr) logger.log(`✅ ${linter} passed for ${filePath}`);
             return stdout || stderr;
         } catch (error) {
             const errorMessage = `❌ Error running ${linter}: ${error.message}`;
-            ui.log(errorMessage);
-            console.error(errorMessage, error);
+            logger.log(errorMessage);
+            logger.error(errorMessage, error);
             return error.stdout || error.stderr || error.message;
         }
     },
 
-    async fixLintErrors(filePath, lintOutput, projectStructure, ui) {
-        ui.log(`🔧 Attempting to fix lint errors for ${filePath}...`);
+    async fixLintErrors(filePath, lintOutput, projectStructure) {
+        logger.log(`🔧 Attempting to fix lint errors for ${filePath}...`);
         try {
             if (lintOutput.includes("Cannot find module")) {
-                await this.createMissingFilesFromLint(lintOutput, projectStructure, ui);
+                await this.createMissingFilesFromLint(lintOutput, projectStructure);
             }
 
             const fileContent = await FileManager.read(filePath);
@@ -95,17 +94,17 @@ Please provide the corrected code that addresses all the linter errors. Consider
             const response = await getResponse(prompt);
 
             await FileManager.write(filePath, response.content[0].text);
-            ui.log(`✅ Lint errors fixed for ${filePath}`);
+            logger.log(`✅ Lint errors fixed for ${filePath}`);
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
             const errorMessage = `❌ Error fixing lint errors for ${filePath}: ${error.message}`;
-            ui.log(errorMessage);
-            console.error(errorMessage, error);
+            logger.log(errorMessage);
+            logger.error(errorMessage, error);
         }
     },
 
-    async optimizeProjectStructure(projectStructure, ui) {
-        ui.log("🔧 Optimizing project structure...");
+    async optimizeProjectStructure(projectStructure) {
+        logger.log("🔧 Optimizing project structure...");
         try {
             const prompt = `
 Analyze the following project structure and provide optimization suggestions:
@@ -123,13 +122,13 @@ Provide the suggestions in a structured format.
 
             const response = await getResponse(prompt);
 
-            ui.log("📊 Project structure optimization suggestions:");
-            ui.log(response.content[0].text);
+            logger.log("📊 Project structure optimization suggestions:");
+            logger.log(response.content[0].text);
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
             const errorMessage = `❌ Error optimizing project structure: ${error.message}`;
-            ui.log(errorMessage);
-            console.error(errorMessage, error);
+            logger.log(errorMessage);
+            logger.error(errorMessage, error);
         }
     },
 
@@ -145,7 +144,7 @@ Provide the suggestions in a structured format.
             const searchTags = [language, 'general'];
             relatedMemories = await MemoryManager.searchMemories(fileContent, searchTags);
         } catch (error) {
-            console.error(chalk.red("❌ Error searching memories:"), error);
+            logger.error(chalk.red("❌ Error searching memories:"), error);
             // We can continue without memories, but we log the error.
         } finally {
             await MemoryManager.disconnect();
@@ -190,8 +189,8 @@ Provide the suggestions in a structured format.`;
         };
     },
 
-    async detectMissingDependencies(projectStructure, ui) {
-        ui.log("🔍 Detecting missing dependencies...");
+    async detectMissingDependencies(projectStructure) {
+        logger.log("🔍 Detecting missing dependencies...");
         const packageContent = await this.getPackageFileContent(projectStructure);
         const prompt = `
      Analyze the following project structure and detect any missing dependencies or files:
@@ -216,8 +215,8 @@ Provide the suggestions in a structured format.`;
      `;
         const response = await getResponse(prompt);
 
-        ui.log("📊 Missing dependencies analysis:");
-        ui.log(response.content[0].text);
+        logger.log("📊 Missing dependencies analysis:");
+        logger.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
 
         try {
@@ -225,30 +224,30 @@ Provide the suggestions in a structured format.`;
             if (jsonString) {
                 const structuredResults = JSON.parse(jsonString);
                 if (structuredResults) {
-                    await this.createMissingFiles(structuredResults?.missingFiles || [], ui);
-                    await this.installMissingPackages(structuredResults?.unlistedDependencies || structuredResults?.missingPackages || {}, ui);
+                    await this.createMissingFiles(structuredResults?.missingFiles || []);
+                    await this.installMissingPackages(structuredResults?.unlistedDependencies || structuredResults?.missingPackages || {});
                 }
             }
         } catch (e) {
             const errorMessage = `❌ Error parsing or processing dependency analysis results: ${e.message}`;
-            ui.log(errorMessage);
-            console.error(errorMessage, e);
+            logger.log(errorMessage);
+            logger.error(errorMessage, e);
         }
     },
 
-    async installMissingPackages(missingPackages, ui) {
+    async installMissingPackages(missingPackages) {
         if (!missingPackages || Object.keys(missingPackages).length === 0) {
-            ui.log("✅ No missing packages to install.");
+            logger.log("✅ No missing packages to install.");
             return;
         }
 
-        ui.log("📦 Found missing packages. Attempting to install...");
+        logger.log("📦 Found missing packages. Attempting to install...");
 
         for (const [language, packages] of Object.entries(missingPackages)) {
             if (packages.length > 0) {
                 const languageConfig = CONFIG.languageConfigs[language];
                 if (!languageConfig) {
-                    ui.log(`⚠️ No package manager configured for ${language}.`);
+                    logger.log(`⚠️ No package manager configured for ${language}.`);
                     continue;
                 }
 
@@ -261,17 +260,17 @@ Provide the suggestions in a structured format.`;
                     case "composer": installCommand = `composer require ${packages.join(" ")}`; break;
                     case "cargo": installCommand = `cargo add ${packages.join(" ")}`; break;
                     default:
-                        ui.log(`⚠️ Automatic installation not supported for ${language} with package manager: ${packageManager}. Please install manually.`);
+                        logger.log(`⚠️ Automatic installation not supported for ${language} with package manager: ${packageManager}. Please install manually.`);
                         continue;
                 }
 
-                ui.log(`Installing ${language} packages: ${packages.join(", ")}...`);
+                logger.log(`Installing ${language} packages: ${packages.join(", ")}...`);
                 try {
                     await execAsync(installCommand);
-                    ui.log(`✅ ${language} packages installed successfully.`);
+                    logger.log(`✅ ${language} packages installed successfully.`);
                 } catch (error) {
-                    ui.log(`❌ Error installing ${language} packages: ${error.message}`);
-                    console.error(error); // Log full error to console for debugging
+                    logger.log(`❌ Error installing ${language} packages: ${error.message}`);
+                    logger.error(error); // Log full error to console for debugging
                 }
             }
         }
@@ -478,23 +477,23 @@ Provide the suggestions in a structured format.`;
         return [...new Set(dependencies)];
     },
 
-    async createMissingFiles(missingFiles, ui) {
+    async createMissingFiles(missingFiles) {
         if (missingFiles.length === 0) return;
-        ui.log("📁 Creating missing files...");
+        logger.log("📁 Creating missing files...");
         for (const filePath of missingFiles) {
             try {
-                await this.addNewFile(filePath, ui);
+                await this.addNewFile(filePath);
             } catch (error) {
                 const errorMessage = `❌ Error creating file ${filePath}: ${error.message}`;
-                ui.log(errorMessage);
-                console.error(errorMessage, error);
+                logger.log(errorMessage);
+                logger.error(errorMessage, error);
             }
         }
     },
 
-    async addNewFile(filePath, ui) {
+    async addNewFile(filePath) {
         try {
-            ui.log(`➕ Adding new file: ${filePath}`);
+            logger.log(`➕ Adding new file: ${filePath}`);
             await FileManager.createSubfolders(filePath);
             if (!path.extname(filePath)) {
                 filePath += ".js";
@@ -503,37 +502,37 @@ Provide the suggestions in a structured format.`;
 
             if (!fileExists) {
                 await FileManager.write(filePath, "");
-                ui.log(`✅ New file ${filePath} has been created.`);
+                logger.log(`✅ New file ${filePath} has been created.`);
             } else {
-                ui.log(`⚠️ File ${filePath} already exists. Skipping creation.`);
+                logger.log(`⚠️ File ${filePath} already exists. Skipping creation.`);
             }
         } catch (error) {
             const errorMessage = `❌ Error adding new file ${filePath}: ${error.message}`;
-            ui.log(errorMessage);
-            console.error(errorMessage, error);
+            logger.log(errorMessage);
+            logger.error(errorMessage, error);
         }
     },
 
-    async createMissingFilesFromLint(lintOutput, projectStructure, ui) {
+    async createMissingFilesFromLint(lintOutput, projectStructure) {
         const missingFileRegex = /Cannot find module '(.+?)'/g;
         const missingFiles = [...lintOutput.matchAll(missingFileRegex)].map((match) => match[1]);
 
         if (missingFiles.length === 0) return;
 
-        ui.log(`Found missing files from lint output: ${missingFiles.join(', ')}`);
+        logger.log(`Found missing files from lint output: ${missingFiles.join(', ')}`);
 
         for (const file of missingFiles) {
             const filePath = path.join(process.cwd(), `${file}.js`);
-            ui.log(`Attempting to create missing file: ${filePath}`);
-            await this.addNewFile(filePath, ui);
+            logger.log(`Attempting to create missing file: ${filePath}`);
+            await this.addNewFile(filePath);
             const generatedContent = await CodeGenerator.generate("", "", filePath, projectStructure);
             await FileManager.write(filePath, generatedContent);
-            ui.log(`✅ Generated content for ${filePath}`);
+            logger.log(`✅ Generated content for ${filePath}`);
         }
     },
 
     async analyzePerformance(filePath) {
-        console.log(chalk.cyan(`🚀 Analyzing performance for ${filePath}...`));
+        logger.log(chalk.cyan(`🚀 Analyzing performance for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -555,13 +554,13 @@ Provide detailed performance optimization suggestions in a structured format.
 
         const response = await getResponse(prompt);
 
-        console.log(chalk.green(`📊 Performance analysis for ${filePath}:`));
-        console.log(response.content[0].text);
+        logger.log(chalk.green(`📊 Performance analysis for ${filePath}:`));
+        logger.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
     },
 
     async checkSecurityVulnerabilities(filePath) {
-        console.log(chalk.cyan(`🔒 Checking security vulnerabilities for ${filePath}...`));
+        logger.log(chalk.cyan(`🔒 Checking security vulnerabilities for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -584,13 +583,13 @@ Provide detailed security vulnerability analysis and suggestions in a structured
 
         const response = await getResponse(prompt);
 
-        console.log(chalk.green(`📊 Security vulnerability analysis for ${filePath}:`));
-        console.log(response.content[0].text);
+        logger.log(chalk.green(`📊 Security vulnerability analysis for ${filePath}:`));
+        logger.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
     },
 
     async generateUnitTests(filePath, projectStructure) {
-        console.log(chalk.cyan(`🧪 Generating unit tests for ${filePath}...`));
+        logger.log(chalk.cyan(`🧪 Generating unit tests for ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -613,18 +612,17 @@ Please consider:
 Provide the generated unit tests in a text code format, ready to be saved in a separate test file. Do not include any explanations or comments in your response, just provide the code. Don't use md formatting or code snippets. Just code text
 `;
 
-        const spinner = ora("Generating unit tests...").start();
-
+        logger.log("Generating unit tests...");
         try {
             const response = await getResponse(prompt);
-            spinner.succeed("Unit tests generated");
+            logger.log("Unit tests generated");
             const testFilePath = filePath.replace(/\.js$/, ".test.js");
             await FileManager.write(testFilePath, response.content[0].text);
-            console.log(chalk.green(`✅ Unit tests generated and saved to ${testFilePath}`));
+            logger.log(chalk.green(`✅ Unit tests generated and saved to ${testFilePath}`));
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Error generating unit tests");
-            console.error(chalk.red(`Error: ${error.message}`));
+            logger.log("Error generating unit tests");
+            logger.error(chalk.red(`Error: ${error.message}`));
         }
     },
 };
