@@ -2,6 +2,7 @@ import express from "express";
 import User from "../models/user.js";
 import { authCookie } from "../middleware/auth.js";
 import { CONFIG } from "../config.js";
+import logger from "../../logger.js";
 
 const router = express.Router();
 
@@ -10,7 +11,7 @@ router.get("/", authCookie, async (req, res) => {
         const user = await User.findById(req.user.id).select("-password");
         res.render("profile", { user });
     } catch (error) {
-        console.error("Error in /profile:", error);
+        logger.error("Error in /profile:", error);
         res.status(500).json({ error: "Server error" });
     }
 });
@@ -20,7 +21,7 @@ router.get("/subscription", authCookie, async (req, res) => {
         const user = await User.findById(req.user.id).select("tier subscriptionStatus");
         res.json({ tier: user.tier, subscriptionStatus: user.subscriptionStatus });
     } catch (error) {
-        console.error("Error in /subscription:", error);
+        logger.error("Error in /subscription:", error);
         res.status(500).json({ error: "Server error" });
     }
 });
@@ -40,7 +41,7 @@ router.get("/usage", authCookie, async (req, res) => {
             remainingRequests,
         });
     } catch (error) {
-        console.error("Error in /usage:", error);
+        logger.error("Error in /usage:", error);
         res.status(500).json({ error: "Server error" });
     }
 });
@@ -55,7 +56,7 @@ router.get("/devices", authCookie, async (req, res) => {
             deviceLimit,
         });
     } catch (error) {
-        console.error("Error in /devices:", error);
+        logger.error("Error in /devices:", error);
         res.status(500).json({ error: "Server error" });
     }
 });

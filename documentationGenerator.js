@@ -1,13 +1,13 @@
 import chalk from "chalk";
 import path from "path";
 import FileManager from "./fileManager.js";
-import ora from "ora";
 import CodeGenerator from "./codeGenerator.js";
 import { getResponse } from "./model.js";
+import logger from "./logger.js";
 
 const DocumentationGenerator = {
     async generate(filePath, content, projectStructure) {
-        console.log(chalk.cyan(`📝 Generating documentation for ${filePath}...`));
+        logger.log(chalk.cyan(`📝 Generating documentation for ${filePath}...`));
         const docFilePath = path.join(path.dirname(filePath), `${path.basename(filePath, path.extname(filePath))}.md`);
 
         const prompt = `
@@ -24,23 +24,21 @@ ${JSON.stringify(projectStructure, null, 2)}
 Please provide comprehensive documentation for the code above. Include an overview, function/method descriptions, parameters, return values, and usage examples where applicable. Consider the project structure when describing the file's role in the overall project. Format the documentation in Markdown.
 `;
 
-        const spinner = ora("Generating documentation...").start();
-
+        logger.startSpinner("Generating documentation...");
         try {
             const response = await getResponse(prompt);
-
-            spinner.succeed("Documentation generated");
+            logger.stopSpinner(true, "Documentation generated");
             await FileManager.write(docFilePath, CodeGenerator.cleanGeneratedCode(response.content[0].text));
-            console.log(chalk.green(`✅ Documentation generated for ${filePath}`));
+            logger.log(chalk.green(`✅ Documentation generated for ${filePath}`));
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Documentation generation failed");
-            console.error(chalk.red(`Error generating documentation for ${filePath}: ${error.message}`));
+            logger.stopSpinner(false, `Error generating documentation for ${filePath}`);
+            logger.error(error.message, error);
         }
     },
 
     async generateProjectDocumentation(projectStructure) {
-        console.log(chalk.cyan("📚 Generating project-wide documentation..."));
+        logger.log(chalk.cyan("📚 Generating project-wide documentation..."));
         const readmeContent = await FileManager.read("README.md");
         const filesContent = await this.getFilesContent(projectStructure);
 
@@ -56,18 +54,16 @@ ${JSON.stringify(filesContent, null, 2)}
 Please provide a detailed project overview, architecture description, module interactions, and usage instructions. Include information about the project's features, installation, and any other relevant details. Format the documentation in Markdown.
 `;
 
-        const spinner = ora("Generating project documentation...").start();
-
+        logger.startSpinner("Generating project documentation...");
         try {
             const response = await getResponse(prompt);
-
-            spinner.succeed("Project documentation generated");
+            logger.stopSpinner(true, "Project documentation generated");
             await FileManager.write("DOCUMENTATION.md", CodeGenerator.cleanGeneratedCode(response.content[0].text));
-            console.log(chalk.green("✅ Project documentation generated"));
+            logger.log(chalk.green("✅ Project documentation generated"));
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Project documentation generation failed");
-            console.error(chalk.red(`Error generating project documentation: ${error.message}`));
+            logger.stopSpinner(false, "Error generating project documentation");
+            logger.error(error.message, error);
         }
     },
 
@@ -84,7 +80,7 @@ Please provide a detailed project overview, architecture description, module int
     },
 
     async generateUnitTestDocumentation(filePath, testContent) {
-        console.log(chalk.cyan(`📝 Generating unit test documentation for ${filePath}...`));
+        logger.log(chalk.cyan(`📝 Generating unit test documentation for ${filePath}...`));
         const docFilePath = path.join(
             path.dirname(filePath),
             `${path.basename(filePath, path.extname(filePath))}_tests.md`
@@ -101,23 +97,21 @@ ${testContent}
 Please provide comprehensive documentation for the unit tests above. Include an overview of the test suite, descriptions of individual test cases, and any setup or teardown procedures. Format the documentation in Markdown.
 `;
 
-        const spinner = ora("Generating unit test documentation...").start();
-
+        logger.startSpinner("Generating unit test documentation...");
         try {
             const response = await getResponse(prompt);
-
-            spinner.succeed("Unit test documentation generated");
+            logger.stopSpinner(true, "Unit test documentation generated");
             await FileManager.write(docFilePath, response.content[0].text);
-            console.log(chalk.green(`✅ Unit test documentation generated for ${filePath}`));
+            logger.log(chalk.green(`✅ Unit test documentation generated for ${filePath}`));
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Unit test documentation generation failed");
-            console.error(chalk.red(`Error generating unit test documentation for ${filePath}: ${error.message}`));
+            logger.stopSpinner(false, `Error generating unit test documentation for ${filePath}`);
+            logger.error(error.message, error);
         }
     },
 
     async generateAPIDocumentation(projectStructure, readme) {
-        console.log(chalk.cyan("📚 Generating API documentation..."));
+        logger.log(chalk.cyan("📚 Generating API documentation..."));
         const apiFiles = Object.keys(projectStructure).filter(
             (file) => file.includes("routes") || file.includes("controllers")
         );
@@ -145,23 +139,21 @@ Please provide detailed documentation for each API endpoint, including:
 Format the documentation in Markdown, suitable for inclusion in a README or separate API documentation file.
 `;
 
-        const spinner = ora("Generating API documentation...").start();
-
+        logger.startSpinner("Generating API documentation...");
         try {
             const response = await getResponse(prompt);
-
-            spinner.succeed("API documentation generated");
+            logger.stopSpinner(true, "API documentation generated");
             await FileManager.write("API_DOCUMENTATION.md", response.content[0].text);
-            console.log(chalk.green("✅ API documentation generated"));
+            logger.log(chalk.green("✅ API documentation generated"));
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("API documentation generation failed");
-            console.error(chalk.red(`Error generating API documentation: ${error.message}`));
+            logger.stopSpinner(false, "Error generating API documentation");
+            logger.error(error.message, error);
         }
     },
 
     async generateChangeLog(commitMessages) {
-        console.log(chalk.cyan("📝 Generating change log..."));
+        logger.log(chalk.cyan("📝 Generating change log..."));
 
         const prompt = `
 Generate a change log based on the following commit messages:
@@ -177,18 +169,16 @@ Please categorize the changes into:
 Format the change log in Markdown, suitable for inclusion in a CHANGELOG.md file.
 `;
 
-        const spinner = ora("Generating change log...").start();
-
+        logger.startSpinner("Generating change log...");
         try {
             const response = await getResponse(prompt);
-
-            spinner.succeed("Change log generated");
+            logger.stopSpinner(true, "Change log generated");
             await FileManager.write("CHANGELOG.md", response.content[0].text);
-            console.log(chalk.green("✅ Change log generated"));
+            logger.log(chalk.green("✅ Change log generated"));
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            spinner.fail("Change log generation failed");
-            console.error(chalk.red(`Error generating change log: ${error.message}`));
+            logger.stopSpinner(false, "Error generating change log");
+            logger.error(error.message, error);
         }
     },
 };

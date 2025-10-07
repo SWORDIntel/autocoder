@@ -1,7 +1,6 @@
 import blessed from 'blessed';
 import path from 'path';
 import { spawn } from 'child_process';
-import fs from 'fs/promises';
 import CodeAnalyzer from './codeAnalyzer.js';
 import FileManager from './fileManager.js';
 import CodeGenerator from './codeGenerator.js';
@@ -13,6 +12,30 @@ import logger from './logger.js';
 
 class TUI {
     constructor() {
+        this.actionHandlers = {
+            "📝 Brainstorm README.md": this.brainstormReadme.bind(this),
+            "🔧 Generate code": this.processFiles.bind(this),
+            "🔍 Detect missing dependencies": this.detectMissingDependencies.bind(this),
+            "🚀 Run static code quality checks": this.runLintChecks.bind(this),
+            "📚 Generate documentation": this.generateDocumentation.bind(this),
+            "🔄 Optimize and refactor file": this.optimizeAndRefactorFile.bind(this),
+            "📚 Generate project documentation": this.generateProjectDocumentation.bind(this),
+            "🤔 Analyze code quality": this.analyzeCodeQuality.bind(this),
+            "🔍 Optimize project structure": this.optimizeProjectStructure.bind(this),
+            "➕ Add new file": this.promptForNewFile.bind(this),
+            "🤖 Run AI Agents": () => logger.log("AI Agents feature is not yet implemented."),
+            "🔒 Security analysis": this.checkSecurityVulnerabilities.bind(this),
+            "🧪 Generate unit tests": this.generateUnitTests.bind(this),
+            "🚀 Analyze performance": this.analyzePerformance.bind(this),
+            "🌐 Generate landing page": this.generateLandingPage.bind(this),
+            "📊 Generate API documentation": this.generateAPIDocumentation.bind(this),
+            "🔄 Generate full project": this.generateFullProject.bind(this),
+            "🧠 Record a Memory": this.promptForMemory.bind(this),
+            "🤖 Change model": this.promptForModel.bind(this),
+            "☁️ Download model": this.promptForModelDownload.bind(this),
+            "📂 Split large file": this.handleSplitLargeFile.bind(this),
+        };
+
         this.screen = null;
         this.mainMenu = null;
         this.fileManager = null;
@@ -37,7 +60,7 @@ class TUI {
         this.screen = blessed.screen({ smartCSR: true, title: 'AutoCode TUI (Local-Only)' });
         this.createLayout();
         this.setupEventHandlers();
-        logger.setLogFunction(this.log.bind(this));
+        logger.setLogFunction(this.logPanel.log.bind(this.logPanel));
         logger.log("TUI Initialized in local-only mode.");
         this.readmePath = path.join(process.cwd(), "README.md");
         await this.refreshAll();
@@ -110,131 +133,124 @@ class TUI {
 
     async executeAction(action, files = []) {
         try {
-            switch (action) {
-                case "Brainstorm README.md":
-                    await this.brainstormReadme();
-                    break;
-                case "Generate code":
-                    await this.processFiles(files);
-                    break;
-                case "Detect missing dependencies":
-                    logger.log("Detecting missing dependencies...");
-                    await CodeAnalyzer.detectMissingDependencies(this.projectStructure);
-                    break;
-                case "Run static code quality checks":
-                    for (const file of files) {
-                        logger.log(`Running lint checks for ${file}...`);
-                        const lintOutput = await CodeAnalyzer.runLintChecks(file);
-                        if (lintOutput) {
-                            logger.log(`Fixing lint errors for ${file}...`);
-                            await CodeAnalyzer.fixLintErrors(file, lintOutput, this.projectStructure);
-                        }
-                    }
-                    break;
-                case "Generate documentation":
-                     for (const file of files) {
-                        logger.log(`Generating documentation for ${file}...`);
-                        const content = await FileManager.read(file);
-                        await DocumentationGenerator.generate(file, content, this.projectStructure);
-                    }
-                    break;
-                case "Optimize and refactor file":
-                    for (const file of files) {
-                        logger.log(`Optimizing file ${file}...`);
-                        await CodeGenerator.optimizeAndRefactorFile(file, this.projectStructure);
-                    }
-                    break;
-                case "Generate project documentation":
-                    logger.log("Generating project documentation...");
-                    await DocumentationGenerator.generateProjectDocumentation(this.projectStructure);
-                    logger.log("✅ Project documentation generated.");
-                    break;
-                case "Analyze code quality":
-                    logger.log(`Analyzing code quality for ${files[0]}...`);
-                    const result = await CodeAnalyzer.analyzeCodeQuality(files[0]);
-                    logger.log(result.analysis);
-                    logger.log(`Finished analysis for ${files[0]}.`);
-                    break;
-                case "Optimize project structure":
-                    await CodeAnalyzer.optimizeProjectStructure(this.projectStructure);
-                    break;
-                case "Add new file":
-                    await this.promptForNewFile();
-                    break;
-                case "Run AI Agents":
-                    logger.log("AI Agents feature is not yet implemented.");
-                    break;
-                case "Security analysis":
-                    for (const file of files) {
-                        logger.log(`Analyzing security for ${file}...`);
-                        await CodeAnalyzer.checkSecurityVulnerabilities(file);
-                    }
-                    break;
-                case "Generate unit tests":
-                    for (const file of files) {
-                        logger.log(`Generating unit tests for ${file}...`);
-                        await CodeAnalyzer.generateUnitTests(file, this.projectStructure);
-                    }
-                    break;
-                case "Analyze performance":
-                    for (const file of files) {
-                        logger.log(`Analyzing performance for ${file}...`);
-                        await CodeAnalyzer.analyzePerformance(file);
-                    }
-                    break;
-                case "Generate landing page":
-                    logger.log("Generating landing page...");
-                    await CodeGenerator.generateLandingPage(this.projectStructure, this.readme);
-                    logger.log("✅ Landing page generated.");
-                    break;
-                case "Generate API documentation":
-                    logger.log("Generating API documentation...");
-                    await DocumentationGenerator.generateAPIDocumentation(this.projectStructure, this.readme);
-                    logger.log("✅ API documentation generated.");
-                    break;
-                case "Generate full project":
-                    logger.log("Generating full project from README...");
-                    await CodeGenerator.generateFullProject(this.projectStructure, this.readme);
-                    logger.log("✅ Full project generation complete.");
-                    break;
-                case "Record a Memory":
-                    await this.promptForMemory(files[0]);
-                    break;
-                case "Change model":
-                    await this.promptForModel();
-                    break;
-                case "Download model":
-                    await this.promptForModelDownload();
-                    break;
-                case "📂 Split large file": {
-                    const filePath = files[0];
-                    if (!filePath) break;
-
-                    const content = await FileManager.read(filePath);
-                    const lineCount = content.split('\n').length;
-
-                    if (lineCount <= CONFIG.maxFileLines) {
-                        logger.log(`File ${filePath} is under the line limit of ${CONFIG.maxFileLines}. No need to split.`);
-                        break;
-                    }
-
-                    logger.log(`File ${filePath} has ${lineCount} lines, exceeding the limit of ${CONFIG.maxFileLines}. Generating split suggestion...`);
-                    const splitSuggestion = await CodeGenerator.splitLargeFile(filePath, content, this.projectStructure);
-
-                    if (splitSuggestion) {
-                        await this.showDiffView(filePath, content, splitSuggestion);
-                    } else {
-                        logger.log("Could not generate a file split suggestion.");
-                    }
-                    break;
-                }
-                default:
-                    logger.log(`Action '${action}' is not implemented.`);
-                    break;
+            const handler = this.actionHandlers[action];
+            if (handler) {
+                await handler(files);
+            } else {
+                logger.log(`Action '${action}' is not implemented.`);
             }
-        } catch(e) {
+        } catch (e) {
             logger.log(`ERROR during action '${action}': ${e.message}`);
             logger.error(e);
+        }
+    }
+
+    async detectMissingDependencies() {
+        logger.log("Detecting missing dependencies...");
+        await CodeAnalyzer.detectMissingDependencies(this.projectStructure);
+    }
+
+    async runLintChecks(files) {
+        for (const file of files) {
+            logger.log(`Running lint checks for ${file}...`);
+            const lintOutput = await CodeAnalyzer.runLintChecks(file);
+            if (lintOutput) {
+                logger.log(`Fixing lint errors for ${file}...`);
+                await CodeAnalyzer.fixLintErrors(file, lintOutput, this.projectStructure);
+            }
+        }
+    }
+
+    async generateDocumentation(files) {
+        for (const file of files) {
+            logger.log(`Generating documentation for ${file}...`);
+            const content = await FileManager.read(file);
+            await DocumentationGenerator.generate(file, content, this.projectStructure);
+        }
+    }
+
+    async optimizeAndRefactorFile(files) {
+        for (const file of files) {
+            logger.log(`Optimizing file ${file}...`);
+            await CodeGenerator.optimizeAndRefactorFile(file, this.projectStructure);
+        }
+    }
+
+    async generateProjectDocumentation() {
+        logger.log("Generating project documentation...");
+        await DocumentationGenerator.generateProjectDocumentation(this.projectStructure);
+        logger.log("✅ Project documentation generated.");
+    }
+
+    async analyzeCodeQuality(files) {
+        logger.log(`Analyzing code quality for ${files[0]}...`);
+        const result = await CodeAnalyzer.analyzeCodeQuality(files[0]);
+        logger.log(result.analysis);
+        logger.log(`Finished analysis for ${files[0]}.`);
+    }
+
+    async optimizeProjectStructure() {
+        await CodeAnalyzer.optimizeProjectStructure(this.projectStructure);
+    }
+
+    async checkSecurityVulnerabilities(files) {
+        for (const file of files) {
+            logger.log(`Analyzing security for ${file}...`);
+            await CodeAnalyzer.checkSecurityVulnerabilities(file);
+        }
+    }
+
+    async generateUnitTests(files) {
+        for (const file of files) {
+            logger.log(`Generating unit tests for ${file}...`);
+            await CodeAnalyzer.generateUnitTests(file, this.projectStructure);
+        }
+    }
+
+    async analyzePerformance(files) {
+        for (const file of files) {
+            logger.log(`Analyzing performance for ${file}...`);
+            await CodeAnalyzer.analyzePerformance(file);
+        }
+    }
+
+    async generateLandingPage() {
+        logger.log("Generating landing page...");
+        await CodeGenerator.generateLandingPage(this.projectStructure, this.readme);
+        logger.log("✅ Landing page generated.");
+    }
+
+    async generateAPIDocumentation() {
+        logger.log("Generating API documentation...");
+        await DocumentationGenerator.generateAPIDocumentation(this.projectStructure, this.readme);
+        logger.log("✅ API documentation generated.");
+    }
+
+    async generateFullProject() {
+        logger.log("Generating full project from README...");
+        await CodeGenerator.generateFullProject(this.projectStructure, this.readme);
+        logger.log("✅ Full project generation complete.");
+    }
+
+    async handleSplitLargeFile(files) {
+        const filePath = files[0];
+        if (!filePath) return;
+
+        const content = await FileManager.read(filePath);
+        const lineCount = content.split('\n').length;
+
+        if (lineCount <= CONFIG.maxFileLines) {
+            logger.log(`File ${filePath} is under the line limit of ${CONFIG.maxFileLines}. No need to split.`);
+            return;
+        }
+
+        logger.log(`File ${filePath} has ${lineCount} lines, exceeding the limit of ${CONFIG.maxFileLines}. Generating split suggestion...`);
+        const splitSuggestion = await CodeGenerator.splitLargeFile(filePath, content, this.projectStructure);
+
+        if (splitSuggestion) {
+            await this.showDiffView(filePath, content, splitSuggestion);
+        } else {
+            logger.log("Could not generate a file split suggestion.");
         }
     }
 
@@ -476,7 +492,7 @@ class TUI {
 
             if (modelId) {
                 try {
-                    await modelDownloader.download(modelId, this);
+                    await modelDownloader.download(modelId);
                 } catch (error) {
                     logger.log(`❌ Error downloading model: ${error.message}`);
                 }
@@ -538,7 +554,7 @@ class TUI {
     async promptForModel() {
         logger.log("Analyzing hardware for recommendations...");
 
-        const analyzerPromise = new Promise((resolve, reject) => {
+        const analyzerPromise = new Promise((resolve) => {
             const process = spawn('python3', ['hardware_analyzer.py', '--json']);
             let report = '';
             let errorOutput = '';
@@ -548,7 +564,7 @@ class TUI {
                 if (code !== 0) {
                     logger.log(`⚠️ Hardware analyzer exited with code ${code}. Recommendations may be unavailable.`);
                     logger.log(`Stderr: ${errorOutput}`);
-                    resolve(null); // Resolve with null on error instead of rejecting
+                    resolve(null);
                 } else {
                     try {
                         resolve(JSON.parse(report));
@@ -576,7 +592,7 @@ class TUI {
             return;
         }
 
-        let recommendedDevice = 'CPU'; // Default
+        let recommendedDevice = 'CPU';
         if (hardwareReport) {
             if (hardwareReport.npu && hardwareReport.npu.detected) {
                 recommendedDevice = 'NPU';
@@ -625,14 +641,6 @@ class TUI {
 
         list.focus();
         this.screen.render();
-    }
-
-    log(message) {
-        if (this.logPanel) {
-            this.logPanel.log(String(message));
-        } else {
-            console.log(String(message));
-        }
     }
 
     async refreshAll() {

@@ -2,6 +2,7 @@ import axios from "axios";
 import chalk from "chalk";
 import { CONFIG } from "./config.js";
 import settingsManager from "./settingsManager.js";
+import logger from "./logger.js";
 
 async function getResponse(prompt, modelOverride, maxNewTokens = 4096) {
     // Load the latest settings to ensure we have the correct model path
@@ -12,11 +13,11 @@ async function getResponse(prompt, modelOverride, maxNewTokens = 4096) {
     // We don't dispatch to different providers, we just use the local server.
     if (!modelPath) {
         const errorMsg = "No local model selected. Please select a model using the /model command.";
-        console.error(chalk.red(errorMsg));
+        logger.error(chalk.red(errorMsg));
         throw new Error(errorMsg);
     }
 
-    console.log(chalk.yellow(`🧪 Using local OpenVINO model from path: ${modelPath}`));
+    logger.log(chalk.yellow(`🧪 Using local OpenVINO model from path: ${modelPath}`));
 
     try {
         const payload = {
@@ -49,7 +50,7 @@ async function getResponse(prompt, modelOverride, maxNewTokens = 4096) {
         } else {
             errorMessage = `Error making request to OpenVINO server: ${error.message}`;
         }
-        console.error(chalk.red(errorMessage));
+        logger.error(chalk.red(errorMessage));
         throw new Error(errorMessage);
     }
 }

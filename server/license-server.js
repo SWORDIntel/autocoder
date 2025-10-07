@@ -4,6 +4,7 @@ import User from "./models/user.js";
 import dotenv from "dotenv";
 import { CONFIG } from "./config.js";
 import { checkDeviceLimit } from "./middleware/auth.js";
+import logger from "../logger.js";
 
 dotenv.config();
 
@@ -49,7 +50,7 @@ router.post("/check", authenticateToken, checkDeviceLimit, async (req, res) => {
         }
         res.json({ message: "Request allowed" });
     } catch (error) {
-        console.error("Error in /check:", error);
+        logger.error("Error in /check:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 });
@@ -62,7 +63,7 @@ router.get("/user", authenticateToken, async (req, res) => {
         }
         res.json(user);
     } catch (error) {
-        console.error("Error in /user:", error);
+        logger.error("Error in /user:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 });
@@ -81,7 +82,7 @@ router.get("/tier-info", authenticateToken, async (req, res) => {
 
         res.json(tierInfo);
     } catch (error) {
-        console.error("Error in /tier-info:", error);
+        logger.error("Error in /tier-info:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 });
