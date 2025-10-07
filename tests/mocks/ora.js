@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 
 // Mock for the 'ora' library.
 // It provides a simplified, chainable mock object to simulate ora's behavior.
-const ora = (options) => {
+const ora = () => {
   const chainable = {
     start: jest.fn().mockReturnThis(),
     succeed: jest.fn().mockReturnThis(),

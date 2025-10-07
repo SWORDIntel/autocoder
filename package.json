@@ -37,6 +37,7 @@
         "js-yaml": "^4.1.0",
         "mongodb": "^6.8.0",
         "mongoose": "^8.5.0",
+        "node-fetch": "^3.3.2",
         "ora": "^8.2.0"
     },
     "devDependencies": {

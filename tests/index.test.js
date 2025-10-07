@@ -1,8 +1,8 @@
 import { jest } from '@jest/globals';
 
 describe('index.js', () => {
-  let main, runWatchMode, runAutomatedMode;
-  let TUI, CodeGenerator, chokidar, tuiInstance;
+  let main;
+  let TUI, CodeGenerator, chokidar;
 
   let originalArgv;
   const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {});
@@ -16,7 +16,6 @@ describe('index.js', () => {
     jest.unstable_mockModule('../tui.js', () => ({
       default: jest.fn(() => ({
         init: jest.fn().mockResolvedValue(),
-        processFiles: jest.fn().mockResolvedValue(),
       })),
     }));
     jest.unstable_mockModule('../fileManager.js', () => ({
@@ -30,6 +29,7 @@ describe('index.js', () => {
     jest.unstable_mockModule('../codeGenerator.js', () => ({
       default: {
         updateReadme: jest.fn().mockResolvedValue('Updated README'),
+        generate: jest.fn().mockResolvedValue('Generated code'),
       },
     }));
     jest.unstable_mockModule('chokidar', () => ({
@@ -48,15 +48,10 @@ describe('index.js', () => {
     // Re-import modules to apply mocks
     const indexModule = await import('../index.js');
     main = indexModule.main;
-    runWatchMode = indexModule.runWatchMode;
-    runAutomatedMode = indexModule.runAutomatedMode;
 
     TUI = (await import('../tui.js')).default;
     CodeGenerator = (await import('../codeGenerator.js')).default;
     chokidar = (await import('chokidar')).default;
-
-    // Get the singleton TUI instance created during module import
-    tuiInstance = TUI.mock.results[0].value;
 
     // Store original process.argv and clear mocks that need resetting
     originalArgv = process.argv;
@@ -71,24 +66,28 @@ describe('index.js', () => {
   });
 
   describe('main function argument parsing', () => {
-    it('should call tui.init by default with no arguments', async () => {
+    it('should create a TUI instance and call init by default', async () => {
       process.argv = ['node', 'index.js'];
       await main();
-      expect(tuiInstance.init).toHaveBeenCalled();
+      expect(TUI).toHaveBeenCalledTimes(1);
+      const tuiInstance = TUI.mock.results[0].value;
+      expect(tuiInstance.init).toHaveBeenCalledTimes(1);
     });
 
     it('should call runWatchMode when --watch flag is provided', async () => {
       process.argv = ['node', 'index.js', '--watch'];
       await main();
       expect(chokidar.watch).toHaveBeenCalled();
+      expect(TUI).not.toHaveBeenCalled();
     });
 
     it('should call runAutomatedMode when --generate flag is provided', async () => {
       process.argv = ['node', 'index.js', '--generate'];
       await main();
       expect(CodeGenerator.updateReadme).toHaveBeenCalled();
-      expect(tuiInstance.processFiles).toHaveBeenCalled();
+      expect(CodeGenerator.generate).toHaveBeenCalledTimes(1);
       expect(mockExit).toHaveBeenCalledWith(0);
+      expect(TUI).not.toHaveBeenCalled();
     });
   });
 });
