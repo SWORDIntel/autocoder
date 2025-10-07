@@ -7,6 +7,7 @@ import CodeGenerator from './codeGenerator.js';
 import DocumentationGenerator from './documentationGenerator.js';
 import settingsManager from './settingsManager.js';
 import modelDownloader from './modelDownloader.js'; // Import the new downloader
+import { CONFIG } from './config.js';
 
 class TUI {
     constructor() {
@@ -26,7 +27,7 @@ class TUI {
             "➕ Add new file", "🤖 Run AI Agents", "🔒 Security analysis",
             "🧪 Generate unit tests", "🚀 Analyze performance", "🌐 Generate landing page",
             "📊 Generate API documentation", "🔄 Generate full project", "🧠 Record a Memory",
-            "🤖 Change model", "☁️ Download model", // Added new action
+            "🤖 Change model", "☁️ Download model", "📂 Split large file",
         ];
     }
 
@@ -92,7 +93,7 @@ class TUI {
         const needsFile = [
             "Generate code", "Run static code quality checks", "Generate documentation",
             "Optimize and refactor file", "Analyze code quality", "Security analysis",
-            "Generate unit tests", "Analyze performance", "Record a Memory",
+            "Generate unit tests", "Analyze performance", "Record a Memory", "📂 Split large file",
         ];
 
         if (needsFile.includes(action)) {
@@ -203,6 +204,102 @@ class TUI {
                 case "Download model": // Added new case
                     await this.promptForModelDownload();
                     break;
+                case "📂 Split large file": {
+                    const filePath = files[0];
+                    if (!filePath) break;
+
+                    const content = await FileManager.read(filePath);
+                    const lineCount = content.split('\n').length;
+
+                    if (lineCount <= CONFIG.maxFileLines) {
+                        this.log(`File ${filePath} is under the line limit of ${CONFIG.maxFileLines}. No need to split.`);
+                        break;
+                    }
+
+                    this.log(`File ${filePath} has ${lineCount} lines, exceeding the limit of ${CONFIG.maxFileLines}. Generating split suggestion...`);
+                    const splitSuggestion = await CodeGenerator.splitLargeFile(filePath, content, this.projectStructure);
+
+                    if (!splitSuggestion) {
+                        this.log(`Could not generate a split suggestion for ${filePath}.`);
+                        break;
+                    }
+
+                    // Create a confirmation dialog
+                    const confirmBox = blessed.box({
+                        parent: this.screen,
+                        top: 'center',
+                        left: 'center',
+                        width: '80%',
+                        height: '80%',
+                        label: ' File Split Suggestion ',
+                        content: splitSuggestion,
+                        border: { type: 'line' },
+                        scrollable: true,
+                        alwaysScroll: true,
+                        scrollbar: { ch: ' ', inverse: true },
+                        keys: true,
+                        vi: true,
+                    });
+
+                    const yesButton = blessed.button({
+                        parent: confirmBox,
+                        mouse: true,
+                        keys: true,
+                        shrink: true,
+                        padding: { left: 1, right: 1 },
+                        left: 2,
+                        bottom: 1,
+                        name: 'yes',
+                        content: 'Yes',
+                        style: {
+                            focus: { bg: 'blue' },
+                            hover: { bg: 'blue' }
+                        }
+                    });
+
+                    const noButton = blessed.button({
+                        parent: confirmBox,
+                        mouse: true,
+                        keys: true,
+                        shrink: true,
+                        padding: { left: 1, right: 1 },
+                        left: 10,
+                        bottom: 1,
+                        name: 'no',
+                        content: 'No',
+                        style: {
+                            focus: { bg: 'blue' },
+                            hover: { bg: 'blue' }
+                        }
+                    });
+
+                    yesButton.on('press', async () => {
+                        confirmBox.destroy();
+                        this.screen.render();
+                        this.log("Applying file split...");
+                        try {
+                            const parsedFiles = CodeGenerator.parseSplitSuggestion(splitSuggestion);
+                            await CodeGenerator.saveFiles(filePath, parsedFiles);
+                            this.log("✅ File split completed.");
+                            await this.refreshFileManager();
+                        } catch (e) {
+                            this.log(`❌ Error applying file split: ${e.message}`);
+                        }
+                        this.mainMenu.focus();
+                    });
+
+                    noButton.on('press', () => {
+                        confirmBox.destroy();
+                        this.screen.render();
+                        this.log("File split cancelled.");
+                        this.mainMenu.focus();
+                    });
+
+                    confirmBox.focus();
+                    this.screen.render();
+
+                    break;
+                }
                 default:
                     this.log(`Action '${action}' is not implemented.`);
                     break;
