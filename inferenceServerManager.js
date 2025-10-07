@@ -2,6 +2,7 @@ import * as child_process from 'child_process';
 import { promisify } from 'util';
 import chalk from 'chalk';
 import path from 'path';
+import logger from './logger.js';
 
 const execFileAsync = promisify(child_process.execFile);
 
@@ -12,7 +13,7 @@ class InferenceServerManager {
 
     async _analyzeHardware() {
         try {
-            console.log(chalk.blue("🔎 Analyzing hardware for optimal performance..."));
+            logger.log(chalk.blue("🔎 Analyzing hardware for optimal performance..."));
             const analyzerPath = path.join(process.cwd(), 'hardware_analyzer.py');
             const { stdout } = await execFileAsync('python3', [analyzerPath, '--json']);
             const hardwareReport = JSON.parse(stdout);
@@ -31,30 +32,31 @@ class InferenceServerManager {
                 return acc;
             }, {});
 
-            console.log(chalk.green(`✅ Hardware analysis complete. Prioritized devices: ${deviceList}`));
+            logger.log(chalk.green(`✅ Hardware analysis complete. Prioritized devices: ${deviceList}`));
             return { deviceList, performanceEnv };
         } catch (error) {
-            console.warn(chalk.yellow("⚠️ Hardware analysis failed. Falling back to default 'CPU' device."), error.message);
+            logger.log(chalk.yellow("⚠️ Hardware analysis failed. Falling back to default 'CPU' device."));
+            logger.error(error.message);
             return { deviceList: 'CPU', performanceEnv: {} };
         }
     }
 
     async start(modelPath) {
         if (this.serverProcess) {
-            console.log(chalk.yellow("Inference server is already running."));
+            logger.log(chalk.yellow("Inference server is already running."));
             return;
         }
 
         if (!modelPath) {
             const errorMsg = "Cannot start inference server: No model path provided. Please select a model first.";
-            console.error(chalk.red(errorMsg));
+            logger.error(chalk.red(errorMsg));
             throw new Error(errorMsg);
         }
 
         const { deviceList, performanceEnv } = await this._analyzeHardware();
 
         return new Promise((resolve, reject) => {
-            console.log(chalk.blue(`🚀 Starting local inference server for model: ${path.basename(modelPath)}...`));
+            logger.log(chalk.blue(`🚀 Starting local inference server for model: ${path.basename(modelPath)}...`));
 
             const serverPath = path.join(process.cwd(), 'openvino_inference_server.py');
             const serverArgs = [
@@ -62,26 +64,25 @@ class InferenceServerManager {
                 '--device', deviceList
             ];
 
-            // Merge the performance environment variables with the current process environment
             const spawnEnv = { ...process.env, ...performanceEnv };
 
             this.serverProcess = child_process.spawn('python3', [serverPath, ...serverArgs], {
                 stdio: ['ignore', 'pipe', 'pipe'],
-                env: spawnEnv, // Pass the enhanced environment to the child process
+                env: spawnEnv,
             });
 
             this.serverProcess.stdout.on('data', (data) => {
                 const output = data.toString().trim();
-                console.log(chalk.gray(`[Server] ${output}`));
+                logger.log(chalk.gray(`[Server] ${output}`));
                 if (output.includes("Starting OpenVINO server on")) {
-                    console.log(chalk.green("✅ Inference server started successfully."));
+                    logger.log(chalk.green("✅ Inference server started successfully."));
                     resolve();
                 }
             });
 
             this.serverProcess.stderr.on('data', (data) => {
                 const errorOutput = data.toString().trim();
-                console.error(chalk.red(`[Server Error] ${errorOutput}`));
+                logger.error(chalk.red(`[Server Error] ${errorOutput}`));
                 if (errorOutput.includes("Server cannot start")) {
                     this.serverProcess = null;
                     reject(new Error(errorOutput));
@@ -90,13 +91,13 @@ class InferenceServerManager {
 
             this.serverProcess.on('close', (code) => {
                 if (code !== 0 && code !== null) {
-                    console.log(chalk.yellow(`Inference server exited with code ${code}`));
+                    logger.log(chalk.yellow(`Inference server exited with code ${code}`));
                 }
                 this.serverProcess = null;
             });
 
             this.serverProcess.on('error', (err) => {
-                console.error(chalk.red('Failed to start server process.'), err);
+                logger.error(chalk.red('Failed to start server process.'), err);
                 this.serverProcess = null;
                 reject(err);
             });
@@ -105,10 +106,10 @@ class InferenceServerManager {
 
     async stop() {
         if (this.serverProcess) {
-            console.log(chalk.blue("🔌 Stopping inference server..."));
+            logger.log(chalk.blue("🔌 Stopping inference server..."));
             return new Promise((resolve) => {
                 this.serverProcess.on('close', () => {
-                    console.log(chalk.green("✅ Server stopped."));
+                    logger.log(chalk.green("✅ Server stopped."));
                     this.serverProcess = null;
                     resolve();
                 });

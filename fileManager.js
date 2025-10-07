@@ -3,6 +3,7 @@ import path from "path";
 import chalk from "chalk";
 import ignore from "ignore";
 import { CONFIG } from "./config.js";
+import logger from "./logger.js";
 
 const FileManager = {
     async read(filePath) {
@@ -12,7 +13,7 @@ const FileManager = {
             if (filePath.includes(".gitignore")) {
                 return null; 
             }
-            console.error(chalk.red(`Error reading file ${filePath}`));
+            logger.error(chalk.red(`Error reading file ${filePath}`));
             return null;
         }
     },
@@ -21,9 +22,9 @@ const FileManager = {
         try {
             await this.createSubfolders(filePath);
             await fs.writeFile(filePath, content, "utf8");
-            console.log(chalk.green(`✅ File ${filePath} has been updated.`));
+            logger.log(chalk.green(`✅ File ${filePath} has been updated.`));
         } catch (error) {
-            console.error(chalk.red(`❌ Error writing file ${filePath}:`), error);
+            logger.error(chalk.red(`❌ Error writing file ${filePath}:`), error);
         }
     },
 
@@ -87,36 +88,36 @@ const FileManager = {
         try {
             await this.createSubfolders(filePath);
             await fs.writeFile(filePath, content, "utf8");
-            console.log(chalk.green(`✅ File ${filePath} has been created.`));
+            logger.log(chalk.green(`✅ File ${filePath} has been created.`));
         } catch (error) {
-            console.error(chalk.red(`❌ Error creating file ${filePath}:`), error);
+            logger.error(chalk.red(`❌ Error creating file ${filePath}:`), error);
         }
     },
 
     async deleteFile(filePath) {
         try {
             await fs.unlink(filePath);
-            console.log(chalk.yellow(`🗑️ File ${filePath} has been deleted.`));
+            logger.log(chalk.yellow(`🗑️ File ${filePath} has been deleted.`));
         } catch (error) {
-            console.error(chalk.red(`❌ Error deleting file ${filePath}:`), error);
+            logger.error(chalk.red(`❌ Error deleting file ${filePath}:`), error);
         }
     },
 
     async renameFile(oldPath, newPath) {
         try {
             await fs.rename(oldPath, newPath);
-            console.log(chalk.blue(`🔄 File renamed from ${oldPath} to ${newPath}.`));
+            logger.log(chalk.blue(`🔄 File renamed from ${oldPath} to ${newPath}.`));
         } catch (error) {
-            console.error(chalk.red(`❌ Error renaming file from ${oldPath} to ${newPath}:`), error);
+            logger.error(chalk.red(`❌ Error renaming file from ${oldPath} to ${newPath}:`), error);
         }
     },
 
     async copyFile(sourcePath, destinationPath) {
         try {
             await fs.copyFile(sourcePath, destinationPath);
-            console.log(chalk.magenta(`📋 File copied from ${sourcePath} to ${destinationPath}.`));
+            logger.log(chalk.magenta(`📋 File copied from ${sourcePath} to ${destinationPath}.`));
         } catch (error) {
-            console.error(chalk.red(`❌ Error copying file from ${sourcePath} to ${destinationPath}:`), error);
+            logger.error(chalk.red(`❌ Error copying file from ${sourcePath} to ${destinationPath}:`), error);
         }
     },
 
@@ -130,7 +131,7 @@ const FileManager = {
                 accessed: stats.atime,
             };
         } catch (error) {
-            console.error(chalk.red(`❌ Error getting stats for file ${filePath}:`), error);
+            logger.error(chalk.red(`❌ Error getting stats for file ${filePath}:`), error);
             return null;
         }
     },
@@ -144,7 +145,7 @@ const FileManager = {
                 isFile: item.isFile(),
             }));
         } catch (error) {
-            console.error(chalk.red(`❌ Error listing contents of directory ${dirPath}:`), error);
+            logger.error(chalk.red(`❌ Error listing contents of directory ${dirPath}:`), error);
             return [];
         }
     },
@@ -161,9 +162,9 @@ const FileManager = {
         } catch (error) {
             if (error.code === 'ENOENT') {
                 // This is a common case, not necessarily an error.
-                console.log(chalk.yellow("The 'models' directory does not exist. No local models discovered."));
+                logger.log(chalk.yellow("The 'models' directory does not exist. No local models discovered."));
             } else {
-                console.error(chalk.red(`❌ Error discovering local models in ${modelsDir}:`), error);
+                logger.error(chalk.red(`❌ Error discovering local models in ${modelsDir}:`), error);
             }
             return [];
         }
