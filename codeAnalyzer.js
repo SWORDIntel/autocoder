@@ -5,11 +5,11 @@ import { CONFIG } from "./config.js";
 import FileManager from "./fileManager.js";
 import CodeGenerator from "./codeGenerator.js";
 import path from "path";
+import inquirer from "inquirer";
 import ora from "ora";
 import fs from "fs/promises";
 import { getResponse } from "./model.js";
 import MemoryManager from "./server/memoryManager.js";
-import PromptBuilder from "./promptBuilder.js";
 
 const execAsync = promisify(exec);
 
@@ -45,71 +45,90 @@ const CodeAnalyzer = {
         }
     },
 
-    async runLintChecks(filePath) {
-        console.log(`🔍 Running code quality checks for ${filePath}...`);
+    async runLintChecks(filePath, ui) {
+        ui.log(`🔍 Running code quality checks for ${filePath}...`);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
 
         const languageConfig = CONFIG.languageConfigs[language];
 
         if (!languageConfig || !languageConfig.linter) {
-            console.log(`⚠️ No linter configured for file extension: ${fileExtension}`);
+            ui.log(`⚠️ No linter configured for file extension: ${fileExtension}`);
             return "";
         }
 
         const linter = languageConfig.linter;
         try {
             const { stdout, stderr } = await execAsync(`npx ${linter} ${filePath}`, { encoding: "utf8" });
-            if (stdout) console.log(`⚠️ ${linter} warnings:\n${stdout}`);
-            if (stderr) console.log(`❌ ${linter} errors:\n${stderr}`);
-            if (!stdout && !stderr) console.log(`✅ ${linter} passed for ${filePath}`);
+            if (stdout) ui.log(`⚠️ ${linter} warnings:\n${stdout}`);
+            if (stderr) ui.log(`❌ ${linter} errors:\n${stderr}`);
+            if (!stdout && !stderr) ui.log(`✅ ${linter} passed for ${filePath}`);
             return stdout || stderr;
         } catch (error) {
             const errorMessage = `❌ Error running ${linter}: ${error.message}`;
-            console.log(errorMessage);
+            ui.log(errorMessage);
             console.error(errorMessage, error);
             return error.stdout || error.stderr || error.message;
         }
     },
 
-    async fixLintErrors(filePath, lintOutput, projectStructure) {
-        console.log(`🔧 Attempting to fix lint errors for ${filePath}...`);
+    async fixLintErrors(filePath, lintOutput, projectStructure, ui) {
+        ui.log(`🔧 Attempting to fix lint errors for ${filePath}...`);
         try {
             if (lintOutput.includes("Cannot find module")) {
-                await this.createMissingFilesFromLint(lintOutput, projectStructure);
+                await this.createMissingFilesFromLint(lintOutput, projectStructure, ui);
             }
 
             const fileContent = await FileManager.read(filePath);
             const fileExtension = path.extname(filePath);
             const language = this.getLanguageFromExtension(fileExtension);
 
-            const prompt = PromptBuilder.buildFixLintErrorsPrompt(language, filePath, lintOutput, fileContent, projectStructure);
+            const prompt = `
+Please fix the following linter errors in the ${language} file ${filePath}:
+${lintOutput}
+Current file content:
+${fileContent}
+Project structure:
+${JSON.stringify(projectStructure, null, 2)}
+Please provide the corrected code that addresses all the linter errors. Consider the project structure when making changes. Do not include any explanations or comments in your response, just provide the code.`;
 
             const response = await getResponse(prompt);
 
             await FileManager.write(filePath, response.content[0].text);
-            console.log(`✅ Lint errors fixed for ${filePath}`);
+            ui.log(`✅ Lint errors fixed for ${filePath}`);
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
             const errorMessage = `❌ Error fixing lint errors for ${filePath}: ${error.message}`;
-            console.log(errorMessage);
+            ui.log(errorMessage);
             console.error(errorMessage, error);
         }
     },
 
-    async optimizeProjectStructure(projectStructure) {
-        console.log("🔧 Optimizing project structure...");
+    async optimizeProjectStructure(projectStructure, ui) {
+        ui.log("🔧 Optimizing project structure...");
         try {
-            const prompt = PromptBuilder.buildOptimizeProjectStructurePrompt(projectStructure);
+            const prompt = `
+Analyze the following project structure and provide optimization suggestions:
+
+${JSON.stringify(projectStructure, null, 2)}
+
+Please provide suggestions for optimizing the project structure, including:
+1. Reorganizing files and folders
+2. Splitting or merging modules
+3. Improving naming conventions
+4. Enhancing overall project architecture
+
+Provide the suggestions in a structured format.
+`;
 
             const response = await getResponse(prompt);
 
-            console.log("📊 Project structure optimization suggestions:");
-            console.log(response.content[0].text);
+            ui.log("📊 Project structure optimization suggestions:");
+            ui.log(response.content[0].text);
             await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
             const errorMessage = `❌ Error optimizing project structure: ${error.message}`;
-            console.log(errorMessage);
+            ui.log(errorMessage);
             console.error(errorMessage, error);
         }
     },
@@ -145,7 +164,18 @@ ${mem.code}
 ---`).join('\n')
             : "No specific memories found for this code, but analyze it based on general best practices.";
 
-        const prompt = PromptBuilder.buildAnalyzeCodeQualityPrompt(language, fileContent, memoryContext);
+        const prompt = `
+Analyze the following ${language} code for quality and provide improvement suggestions:
+${fileContent}
+${memoryContext}
+Please consider:
+1. Adherence to DRY, KISS, and SRP principles
+2. Code readability and maintainability
+3. Potential performance improvements
+4. Error handling and edge cases
+5. Security considerations
+6. ${language}-specific best practices
+Provide the suggestions in a structured format.`;
 
         const response = await getResponse(prompt);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
@@ -160,59 +190,65 @@ ${mem.code}
         };
     },
 
-    async detectMissingDependencies(projectStructure) {
-        console.log("🔍 Detecting missing dependencies...");
+    async detectMissingDependencies(projectStructure, ui) {
+        ui.log("🔍 Detecting missing dependencies...");
         const packageContent = await this.getPackageFileContent(projectStructure);
-        const dependenciesGraph = await this.analyzeDependencies(projectStructure);
-        const prompt = PromptBuilder.buildDetectMissingDependenciesPrompt(projectStructure, dependenciesGraph, packageContent);
+        const prompt = `
+     Analyze the following project structure and detect any missing dependencies or files:
+
+     ${JSON.stringify(projectStructure, null, 2)}
+
+     Dependencies graph:
+
+     ${JSON.stringify(await this.analyzeDependencies(projectStructure), null, 2)}
+
+     Package file content:
+     ${packageContent}
+
+     Please identify:
+     1. Missing packages based on import statements for each supported language (e.g., {"javascript": ["react"], "python": ["numpy"]})
+     2. Missing files that are referenced but not present in the project structure (please always return filenames based on repo root)
+     3. Potential circular dependencies
+     4. Dependencies listed in the package file but not used in the project
+     5. Dependencies used in the project but not listed in the package file
+
+     Provide the results in a single JSON code snippet.
+     `;
         const response = await getResponse(prompt);
 
-        console.log("📊 Missing dependencies analysis:");
-        console.log(response.content[0].text);
+        ui.log("📊 Missing dependencies analysis:");
+        ui.log(response.content[0].text);
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
 
-        const analysisResults = this.parseDependencyAnalysis(response.content?.[0]?.text);
-        if (analysisResults) {
-            await this.handleDependencyAnalysisResults(analysisResults);
-        }
-    },
-
-    parseDependencyAnalysis(responseText) {
         try {
-            const jsonString = responseText?.match(/```json([\s\S]*?)```/)?.[1];
+            const jsonString = response.content?.[0]?.text?.match(/```json([\s\S]*?)```/)?.[1];
             if (jsonString) {
-                return JSON.parse(jsonString);
+                const structuredResults = JSON.parse(jsonString);
+                if (structuredResults) {
+                    await this.createMissingFiles(structuredResults?.missingFiles || [], ui);
+                    await this.installMissingPackages(structuredResults?.unlistedDependencies || structuredResults?.missingPackages || {}, ui);
+                }
             }
         } catch (e) {
-            const errorMessage = `❌ Error parsing dependency analysis results: ${e.message}`;
-            console.log(errorMessage);
+            const errorMessage = `❌ Error parsing or processing dependency analysis results: ${e.message}`;
+            ui.log(errorMessage);
             console.error(errorMessage, e);
         }
-        return null;
     },
 
-    async handleDependencyAnalysisResults(results) {
-        if (results.missingFiles) {
-            await this.createMissingFiles(results.missingFiles);
-        }
-        if (results.unlistedDependencies || results.missingPackages) {
-            await this.installMissingPackages(results.unlistedDependencies || results.missingPackages);
-        }
-    },
-
-    async installMissingPackages(missingPackages) {
+    async installMissingPackages(missingPackages, ui) {
         if (!missingPackages || Object.keys(missingPackages).length === 0) {
-            console.log("✅ No missing packages to install.");
+            ui.log("✅ No missing packages to install.");
             return;
         }
 
-        console.log("📦 Found missing packages. Attempting to install...");
+        ui.log("📦 Found missing packages. Attempting to install...");
 
         for (const [language, packages] of Object.entries(missingPackages)) {
             if (packages.length > 0) {
                 const languageConfig = CONFIG.languageConfigs[language];
                 if (!languageConfig) {
-                    console.log(`⚠️ No package manager configured for ${language}.`);
+                    ui.log(`⚠️ No package manager configured for ${language}.`);
                     continue;
                 }
 
@@ -225,16 +261,16 @@ ${mem.code}
                     case "composer": installCommand = `composer require ${packages.join(" ")}`; break;
                     case "cargo": installCommand = `cargo add ${packages.join(" ")}`; break;
                     default:
-                        console.log(`⚠️ Automatic installation not supported for ${language} with package manager: ${packageManager}. Please install manually.`);
+                        ui.log(`⚠️ Automatic installation not supported for ${language} with package manager: ${packageManager}. Please install manually.`);
                         continue;
                 }
 
-                console.log(`Installing ${language} packages: ${packages.join(", ")}...`);
+                ui.log(`Installing ${language} packages: ${packages.join(", ")}...`);
                 try {
                     await execAsync(installCommand);
-                    console.log(`✅ ${language} packages installed successfully.`);
+                    ui.log(`✅ ${language} packages installed successfully.`);
                 } catch (error) {
-                    console.log(`❌ Error installing ${language} packages: ${error.message}`);
+                    ui.log(`❌ Error installing ${language} packages: ${error.message}`);
                     console.error(error); // Log full error to console for debugging
                 }
             }
@@ -442,23 +478,23 @@ ${mem.code}
         return [...new Set(dependencies)];
     },
 
-    async createMissingFiles(missingFiles) {
+    async createMissingFiles(missingFiles, ui) {
         if (missingFiles.length === 0) return;
-        console.log("📁 Creating missing files...");
+        ui.log("📁 Creating missing files...");
         for (const filePath of missingFiles) {
             try {
-                await this.addNewFile(filePath);
+                await this.addNewFile(filePath, ui);
             } catch (error) {
                 const errorMessage = `❌ Error creating file ${filePath}: ${error.message}`;
-                console.log(errorMessage);
+                ui.log(errorMessage);
                 console.error(errorMessage, error);
             }
         }
     },
 
-    async addNewFile(filePath) {
+    async addNewFile(filePath, ui) {
         try {
-            console.log(`➕ Adding new file: ${filePath}`);
+            ui.log(`➕ Adding new file: ${filePath}`);
             await FileManager.createSubfolders(filePath);
             if (!path.extname(filePath)) {
                 filePath += ".js";
@@ -467,32 +503,32 @@ ${mem.code}
 
             if (!fileExists) {
                 await FileManager.write(filePath, "");
-                console.log(`✅ New file ${filePath} has been created.`);
+                ui.log(`✅ New file ${filePath} has been created.`);
             } else {
-                console.log(`⚠️ File ${filePath} already exists. Skipping creation.`);
+                ui.log(`⚠️ File ${filePath} already exists. Skipping creation.`);
             }
         } catch (error) {
             const errorMessage = `❌ Error adding new file ${filePath}: ${error.message}`;
-            console.log(errorMessage);
+            ui.log(errorMessage);
             console.error(errorMessage, error);
         }
     },
 
-    async createMissingFilesFromLint(lintOutput, projectStructure) {
+    async createMissingFilesFromLint(lintOutput, projectStructure, ui) {
         const missingFileRegex = /Cannot find module '(.+?)'/g;
         const missingFiles = [...lintOutput.matchAll(missingFileRegex)].map((match) => match[1]);
 
         if (missingFiles.length === 0) return;
 
-        console.log(`Found missing files from lint output: ${missingFiles.join(', ')}`);
+        ui.log(`Found missing files from lint output: ${missingFiles.join(', ')}`);
 
         for (const file of missingFiles) {
             const filePath = path.join(process.cwd(), `${file}.js`);
-            console.log(`Attempting to create missing file: ${filePath}`);
-            await this.addNewFile(filePath);
+            ui.log(`Attempting to create missing file: ${filePath}`);
+            await this.addNewFile(filePath, ui);
             const generatedContent = await CodeGenerator.generate("", "", filePath, projectStructure);
             await FileManager.write(filePath, generatedContent);
-            console.log(`✅ Generated content for ${filePath}`);
+            ui.log(`✅ Generated content for ${filePath}`);
         }
     },
 
@@ -590,46 +626,6 @@ Provide the generated unit tests in a text code format, ready to be saved in a s
             spinner.fail("Error generating unit tests");
             console.error(chalk.red(`Error: ${error.message}`));
         }
-    },
-
-    async detectDeadCode() {
-        console.log("🔍 Detecting dead code...");
-        const projectStructure = await FileManager.getProjectStructure();
-        const allFiles = await FileManager.getAllFiles();
-        const fileContents = {};
-        for (const file of allFiles) {
-            fileContents[file] = await FileManager.read(file);
-        }
-
-        const prompt = PromptBuilder.buildDetectDeadCodePrompt(projectStructure, fileContents);
-        const response = await getResponse(prompt);
-
-        console.log("📊 Dead code analysis:");
-        console.log(response.content[0].text);
-    },
-
-    async detectCodeSmells(filePath) {
-        console.log(`🔍 Detecting code smells for ${filePath}...`);
-        const fileContent = await FileManager.read(filePath);
-        const prompt = PromptBuilder.buildDetectCodeSmellsPrompt(filePath, fileContent);
-        const response = await getResponse(prompt);
-
-        console.log(`📊 Code smell analysis for ${filePath}:`);
-        console.log(response.content[0].text);
-    },
-
-    async suggestCrossFileRefactoring(files) {
-        console.log("🔍 Suggesting cross-file refactoring...");
-        const fileContents = {};
-        for (const file of files) {
-            fileContents[file] = await FileManager.read(file);
-        }
-
-        const prompt = PromptBuilder.buildSuggestCrossFileRefactoringPrompt(JSON.stringify(fileContents, null, 2));
-        const response = await getResponse(prompt);
-
-        console.log("📊 Cross-file refactoring suggestions:");
-        console.log(response.content[0].text);
     },
 };
 

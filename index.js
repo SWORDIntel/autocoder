@@ -9,27 +9,7 @@ import CodeGenerator from "./codeGenerator.js";
 import settingsManager from "./settingsManager.js";
 import inferenceServerManager from "./inferenceServerManager.js";
 
-async function processAllFiles(files, readme, projectStructure) {
-    const allFileContents = {};
-    for (const file of files) {
-        allFileContents[file] = await FileManager.read(file);
-    }
-
-    for (const file of files) {
-        console.log(`Processing ${file}...`);
-        const generatedContent = await CodeGenerator.generate(
-            readme,
-            allFileContents[file],
-            file,
-            projectStructure,
-            allFileContents
-        );
-        await FileManager.write(file, generatedContent);
-        console.log(`✅ ${file} processed.`);
-    }
-}
-
-let tui;
+const tui = new TUI();
 
 export async function runWatchMode() {
     console.log(chalk.blue("👀 Running in watch mode..."));
@@ -53,7 +33,7 @@ export async function runWatchMode() {
 
             const projectStructure = await FileManager.getProjectStructure();
             const filesToProcess = await FileManager.getFilesToProcess();
-            await processAllFiles(filesToProcess, readme, projectStructure);
+            await tui.processFiles(filesToProcess, readme, projectStructure);
 
             console.log(chalk.green("✅ Automated refactoring complete. Watching for new changes..."));
         } catch (error) {
@@ -87,7 +67,7 @@ export async function runAutomatedMode() {
 
         console.log(chalk.cyan("🔧 Generating code for all files..."));
         const filesToProcess = await FileManager.getFilesToProcess();
-        await processAllFiles(filesToProcess, readme, projectStructure);
+        await tui.processFiles(filesToProcess, readme, projectStructure);
         console.log(chalk.green("✅ Code generation for all files complete."));
 
         console.log(chalk.green("🎉 Automated mode completed successfully!"));
@@ -126,7 +106,6 @@ export async function main() {
         return;
     }
 
-    tui = new TUI();
     await tui.init();
     if (process.env.JEST_WORKER_ID === undefined) {
         return new Promise(() => {});
