@@ -13,7 +13,7 @@ let testPassed = false;
 
 console.log('Starting TUI test for "Add new file"...');
 
-child.stdout.on('data', (data) => {
+child.stdout.on('data', () => {
   // console.log(`TUI stdout: ${data.toString()}`);
 });
 
@@ -27,7 +27,7 @@ child.on('close', async (code) => {
     await fs.access(newFilePath);
     console.log(`✅ TEST PASSED: File "${newFileName}" was created successfully.`);
     testPassed = true;
-  } catch (error) {
+  } catch {
     console.error(`❌ TEST FAILED: File "${newFileName}" was not found.`);
   } finally {
     if (testPassed) {

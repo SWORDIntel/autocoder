@@ -1,7 +1,6 @@
 import blessed from 'blessed';
 import path from 'path';
 import { spawn } from 'child_process';
-import fs from 'fs/promises';
 import CodeAnalyzer from './codeAnalyzer.js';
 import FileManager from './fileManager.js';
 import CodeGenerator from './codeGenerator.js';
@@ -146,12 +145,13 @@ class TUI {
                     await DocumentationGenerator.generateProjectDocumentation(this.projectStructure);
                     this.log("✅ Project documentation generated.");
                     break;
-                case "Analyze code quality":
+                case "Analyze code quality": {
                     this.log(`Analyzing code quality for ${files[0]}...`);
                     const result = await CodeAnalyzer.analyzeCodeQuality(files[0]);
                     this.log(result.analysis);
                     this.log(`Finished analysis for ${files[0]}.`);
                     break;
+                }
                 case "Optimize project structure":
                     await CodeAnalyzer.optimizeProjectStructure(this.projectStructure, this);
                     break;
@@ -350,7 +350,7 @@ class TUI {
         });
 
         blessed.text({ parent: form, top: 4, left: 2, content: 'Tags (comma-separated):' });
-        const tagsInput = blessed.textbox({
+        blessed.textbox({
             parent: form, name: 'tags', top: 5, left: 2, height: 1, width: '95%',
             inputOnFocus: true, style: { focus: { bg: 'blue' } }
         });
@@ -381,7 +381,7 @@ class TUI {
     async promptForModel() {
         this.log("Analyzing hardware for recommendations...");
 
-        const analyzerPromise = new Promise((resolve, reject) => {
+        const analyzerPromise = new Promise((resolve) => {
             const process = spawn('python3', ['hardware_analyzer.py', '--json']);
             let report = '';
             let errorOutput = '';
@@ -489,7 +489,7 @@ class TUI {
     async refreshReadme() {
         try {
             this.readme = await FileManager.read(this.readmePath);
-        } catch (e) {
+        } catch {
             this.log(`Could not read README.md at ${this.readmePath}. Some features may not work.`);
             this.readme = "";
         }
