@@ -148,6 +148,26 @@ const FileManager = {
             return [];
         }
     },
+
+    async discoverLocalModels() {
+        const modelsDir = path.join(process.cwd(), 'models');
+        try {
+            await fs.access(modelsDir); // Check if the directory exists
+            const entries = await fs.readdir(modelsDir, { withFileTypes: true });
+            const modelDirs = entries
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => path.join(modelsDir, dirent.name));
+            return modelDirs;
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                // This is a common case, not necessarily an error.
+                console.log(chalk.yellow("The 'models' directory does not exist. No local models discovered."));
+            } else {
+                console.error(chalk.red(`❌ Error discovering local models in ${modelsDir}:`), error);
+            }
+            return [];
+        }
+    },
 };
 
 export default FileManager;

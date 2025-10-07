@@ -1,5 +1,6 @@
 import blessed from 'blessed';
 import path from 'path';
+import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import CodeAnalyzer from './codeAnalyzer.js';
 import FileManager from './fileManager.js';
@@ -378,16 +379,71 @@ class TUI {
     }
 
     async promptForModel() {
-        this.log("Discovering local models...");
-        const models = await FileManager.discoverLocalModels();
+        this.log("Analyzing hardware for recommendations...");
 
+        const analyzerPromise = new Promise((resolve, reject) => {
+            const process = spawn('python3', ['hardware_analyzer.py', '--json']);
+            let report = '';
+            let errorOutput = '';
+            process.stdout.on('data', (data) => report += data.toString());
+            process.stderr.on('data', (data) => errorOutput += data.toString());
+            process.on('close', (code) => {
+                if (code !== 0) {
+                    this.log(`⚠️ Hardware analyzer exited with code ${code}. Recommendations may be unavailable.`);
+                    this.log(`Stderr: ${errorOutput}`);
+                    resolve(null); // Resolve with null on error instead of rejecting
+                } else {
+                    try {
+                        resolve(JSON.parse(report));
+                    } catch (e) {
+                        this.log(`❌ Error parsing hardware analyzer output: ${e.message}`);
+                        resolve(null);
+                    }
+                }
+            });
+             process.on('error', (err) => {
+                this.log(`❌ Failed to start hardware analyzer: ${err.message}`);
+                resolve(null);
+            });
+        });
+
+        const [hardwareReport, models] = await Promise.all([
+            analyzerPromise,
+            FileManager.discoverLocalModels()
+        ]);
+
+        this.log("Discovering local models...");
         if (models.length === 0) {
             this.log("No local models found in the 'models' directory.");
-            this.log("Please make sure you have downloaded models and placed them in subdirectories inside the 'models' folder.");
+            this.log("Please download models and place them in subdirectories inside the 'models' folder.");
             return;
         }
 
-        const modelNames = models.map(modelPath => path.basename(modelPath));
+        let recommendedDevice = 'CPU'; // Default
+        if (hardwareReport) {
+            if (hardwareReport.npu && hardwareReport.npu.detected) {
+                recommendedDevice = 'NPU';
+            } else if (hardwareReport.gpu && hardwareReport.gpu.detected) {
+                recommendedDevice = 'GPU';
+            }
+            this.log(`Hardware analysis complete. Recommended device: ${recommendedDevice}`);
+        }
+
+        const modelNames = models.map(modelPath => {
+            const modelName = path.basename(modelPath);
+            // Simple heuristic: check if model name contains 'npu', 'gpu', etc.
+            const isRecommended = recommendedDevice !== 'CPU' && modelName.toLowerCase().includes(recommendedDevice.toLowerCase());
+            return {
+                name: modelName,
+                path: modelPath,
+                recommended: isRecommended
+            };
+        });
+
+        // Sort recommended models to the top
+        modelNames.sort((a, b) => b.recommended - a.recommended);
+
+        const listItems = modelNames.map(m => m.recommended ? `[✨ Recommended] ${m.name}` : m.name);
 
         const list = blessed.list({
             parent: this.screen,
@@ -397,7 +453,7 @@ class TUI {
             top: 'center',
             left: 'center',
             border: 'line',
-            items: modelNames,
+            items: listItems,
             keys: true,
             mouse: true,
             vi: true,
@@ -405,9 +461,9 @@ class TUI {
         });
 
         list.on('select', async (item, select) => {
-            const selectedModelPath = models[select];
-            await settingsManager.set('model', selectedModelPath);
-            this.log(`✅ Model set to ${path.basename(selectedModelPath)}`);
+            const selectedModel = modelNames[select];
+            await settingsManager.set('model', selectedModel.path);
+            this.log(`✅ Model set to ${selectedModel.name}`);
             list.destroy();
             this.screen.render();
         });
