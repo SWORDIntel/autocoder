@@ -11,6 +11,7 @@ import {
     sendPasswordResetEmail,
     sendWelcomeEmail,
 } from "../utils.js";
+import logger from "../../logger.js";
 
 const router = express.Router();
 
@@ -36,7 +37,7 @@ router.post("/register", async (req, res) => {
         await sendWelcomeEmail(user.email);
         res.status(201).json({ token });
     } catch (error) {
-        console.error(error);
+        logger.error(error);
         res.status(500).json({ error: "Error registering user" });
     }
 });
@@ -60,7 +61,7 @@ router.post("/login", async (req, res) => {
         await user.save();
         res.json({ token });
     } catch (error) {
-        console.error(error);
+        logger.error(error);
         res.status(500).json({ error: "Error logging in" });
     }
 });
@@ -78,7 +79,7 @@ router.post("/contact", async (req, res) => {
         await inquiry.save();
         res.status(201).json({ message: "Inquiry submitted successfully" });
     } catch (error) {
-        console.error(error);
+        logger.error(error);
         res.status(500).json({ error: "Error submitting inquiry" });
     }
 });
@@ -99,7 +100,7 @@ router.post("/forgot-password", async (req, res) => {
         await sendPasswordResetEmail(user.email, resetUrl);
         res.json({ message: "Password reset email sent" });
     } catch (error) {
-        console.error(error);
+        logger.error(error);
         res.status(500).json({ error: "Error sending password reset email" });
     }
 });
@@ -122,7 +123,7 @@ router.post("/reset-password/:token", async (req, res) => {
 
         res.json({ message: "Password has been reset" });
     } catch (error) {
-        console.error(error);
+        logger.error(error);
         res.status(500).json({ error: "Error resetting password" });
     }
 });

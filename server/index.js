@@ -11,6 +11,7 @@ import paymentRoutes from "./routes/payment.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import licenseServer from "./license-server.js";
 import dotenv from "dotenv";
+import logger from "../logger.js";
 
 dotenv.config();
 
@@ -88,16 +89,16 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res) => {
-    console.error(err.stack);
+    logger.error(err.stack);
     res.status(500).render("500");
 });
 
 app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    logger.log(`Server running on port ${port}`);
 });
 
 process.on("uncaughtException", (err, origin) => {
-    console.error(`Caught exception: ${err}`, `Exception origin: ${origin}`);
+    logger.error(`Caught exception: ${err}`, `Exception origin: ${origin}`);
 });
 
 export default app;

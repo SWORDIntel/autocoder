@@ -7,7 +7,6 @@ import CodeAnalyzer from "./codeAnalyzer.js";
 import DocumentationGenerator from "./documentationGenerator.js";
 import fs from "fs/promises";
 import { getResponse } from "./model.js";
-import UserInterface from "./userInterface.js";
 
 const DEFAULT_MAX_NEW_TOKENS = 4096;
 
@@ -44,14 +43,15 @@ Package manager: ${languageConfig.packageManager}
 Please generate or update the ${fileName} file to implement the features described in the README. Ensure the code is complete, functional, and follows best practices for ${language}. Consider the project structure and the content of other selected files when making changes or adding new features. Reuse functionality from other modules and avoid duplicating code. Do not include any explanations or comments in your response, just provide the code.
 `;
 
-        logger.log("Generating code...");
+        logger.startSpinner("Generating code...");
         try {
             const response = await getResponse(prompt, undefined, DEFAULT_MAX_NEW_TOKENS);
-            logger.log("Code generated successfully");
+            logger.stopSpinner(true, "Code generated successfully");
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             return this.cleanGeneratedCode(response.content[0].text);
         } catch (error) {
-            logger.error("Error generating code", error);
+            logger.stopSpinner(false, "Error generating code");
+            logger.error(error.message, error);
             throw error;
         }
     },
@@ -76,15 +76,16 @@ ${JSON.stringify(projectStructure, null, 2)}
 Please update the README.md file with new design ideas and considerations. Ensure the content is well-structured and follows best practices. Consider the current project structure when suggesting improvements or new features. Do not include any explanations or comments in your response, just provide the updated README.md content.
 `;
 
-        logger.log("Updating README...");
+        logger.startSpinner("Updating README...");
         try {
             const response = await getResponse(prompt, undefined, DEFAULT_MAX_NEW_TOKENS);
-            logger.log("README updated successfully");
+            logger.stopSpinner(true, "README updated successfully");
             const updatedReadme = this.cleanGeneratedCode(response.content[0].text);
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             return updatedReadme;
         } catch (error) {
-            logger.error("Error updating README", error);
+            logger.stopSpinner(false, "Error updating README");
+            logger.error(error.message, error);
             throw error;
         }
     },
@@ -126,15 +127,16 @@ Please provide your suggestions in the following Markdown format:
 ... (repeat for all new files)
 `;
 
-        logger.log("Generating file split suggestion...");
+        logger.startSpinner("Generating file split suggestion...");
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            logger.log("File split suggestion generated");
+            logger.stopSpinner(true, "File split suggestion generated");
             const splitSuggestion = response.content[0].text;
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             return splitSuggestion;
         } catch (error) {
-            logger.error("Error generating file split suggestion", error);
+            logger.stopSpinner(false, "Error generating file split suggestion");
+            logger.error(error.message, error);
             throw error;
         }
     },
@@ -164,7 +166,7 @@ Please provide your suggestions in the following Markdown format:
     },
 
     async optimizeAndRefactorFile(filePath, projectStructure) {
-        logger.log(chalk.cyan(`🔄 Optimizing and refactoring ${filePath}...`));
+        logger.startSpinner(chalk.cyan(`🔄 Optimizing and refactoring ${filePath}...`));
         const fileContent = await FileManager.read(filePath);
         const fileExtension = path.extname(filePath);
         const language = this.getLanguageFromExtension(fileExtension);
@@ -197,16 +199,16 @@ Focus on:
 Return the optimized and refactored code ONLY!! without explanations or comments or md formatting. Do not include any explanations or comments in your response, just provide the code.
 `;
 
-        logger.log("Optimizing and refactoring...");
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            logger.log("Optimization and refactoring completed");
+            logger.stopSpinner(true, "Optimization and refactoring completed");
             const optimizedCode = this.cleanGeneratedCode(response.content[0].text);
             await FileManager.write(filePath, optimizedCode);
             logger.log(chalk.green(`✅ ${filePath} has been optimized and refactored.`));
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            logger.error("Error optimizing and refactoring", error);
+            logger.stopSpinner(false, "Error optimizing and refactoring");
+            logger.error(error.message, error);
             throw error;
         }
     },
@@ -263,8 +265,6 @@ Return the optimized and refactored code ONLY!! without explanations or comments
                 return;
         }
 
-        logger.log(chalk.cyan(`📦 Generating ${dependencyFileName} for ${language}...`));
-
         const prompt = `
 Please generate a ${dependencyFileName} file for a ${language} project with the following structure:
 
@@ -278,23 +278,22 @@ Include all necessary dependencies based on the project structure and features d
 Return the content of the ${dependencyFileName} file without explanations or comments. Do not include any explanations or comments in your response, just provide the code.
 `;
 
-        logger.log(`Generating ${dependencyFileName}...`);
+        logger.startSpinner(`📦 Generating ${dependencyFileName} for ${language}...`);
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            logger.log(`${dependencyFileName} generated successfully`);
+            logger.stopSpinner(true, `${dependencyFileName} generated successfully`);
             const dependencyFileContent = this.cleanGeneratedCode(response.content[0].text);
             await FileManager.write(dependencyFileName, dependencyFileContent);
             logger.log(chalk.green(`✅ Generated ${dependencyFileName}`));
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            logger.error(`Error generating ${dependencyFileName}`, error);
+            logger.stopSpinner(false, `Error generating ${dependencyFileName}`);
+            logger.error(error.message, error);
             throw error;
         }
     },
 
     async generateAIAgentCode(agentType, agentDescription, projectStructure, readme) {
-        logger.log(chalk.cyan(`🤖 Generating AI agent code for ${agentType}...`));
-
         const fileManagerContent = await FileManager.read("fileManager.js");
         const userInterfaceContent = await FileManager.read("userInterface.js");
         const configContent = await FileManager.read("config.js");
@@ -324,24 +323,23 @@ Ensure the code is complete, functional, and follows best practices for JavaScri
 Return the generated code for the ${agentType} AI agent without explanations or comments. Do not include any explanations or comments in your response, just provide the code.
 `;
 
-        logger.log(`Generating ${agentType} AI agent code...`);
+        logger.startSpinner(`🤖 Generating AI agent code for ${agentType}...`);
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            logger.log(`${agentType} AI agent code generated successfully`);
+            logger.stopSpinner(true, `${agentType} AI agent code generated successfully`);
             const agentCode = this.cleanGeneratedCode(response.content[0].text);
             const fileName = `./${agentType.replace(/\s+/g, "")}.js`;
             await FileManager.write(fileName, agentCode);
             logger.log(chalk.green(`✅ Generated ${fileName}`));
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            logger.error(`Error generating ${agentType} AI agent code`, error);
+            logger.stopSpinner(false, `Error generating ${agentType} AI agent code`);
+            logger.error(error.message, error);
             throw error;
         }
     },
 
     async generateLandingPage(projectStructure, readme) {
-        logger.log(chalk.cyan("🌐 Generating landing page..."));
-
         const prompt = `
 Please generate an HTML file for a landing page based on the project structure and features described in the README.md. The landing page should showcase the key features of the project and provide a visually appealing introduction.
 
@@ -360,17 +358,18 @@ Use the following design guidelines:
 Return the generated HTML code for the landing page without explanations or comments.
 `;
 
-        logger.log("Generating landing page...");
+        logger.startSpinner("🌐 Generating landing page...");
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            logger.log("Landing page generated successfully");
+            logger.stopSpinner(true, "Landing page generated successfully");
             const landingPageCode = this.cleanGeneratedCode(response.content[0].text);
             const fileName = "landing.html";
             await FileManager.write(fileName, landingPageCode);
             logger.log(chalk.green(`✅ Generated ${fileName}`));
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            logger.error("Error generating landing page", error);
+            logger.stopSpinner(false, "Error generating landing page");
+            logger.error(error.message, error);
             throw error;
         }
     },
@@ -378,7 +377,8 @@ Return the generated HTML code for the landing page without explanations or comm
     async generateFullProject(projectStructure, readme) {
         logger.log(chalk.cyan("🚀 Generating full project..."));
 
-        const { language } = await UserInterface.promptForLanguage();
+        // TODO: Get language from TUI
+        const language = 'javascript';
         await this.generateDependencyFile(language, projectStructure, readme);
 
         const files = Object.keys(projectStructure).filter(
@@ -432,17 +432,18 @@ Ensure the code is complete, functional, and follows best practices for JavaScri
 Return the generated code for ${fileName} without explanations or comments.
 `;
 
-            logger.log(`Generating ${fileName}...`);
+            logger.startSpinner(`Generating ${fileName}...`);
             try {
                 const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-                logger.log(`${fileName} generated successfully`);
+                logger.stopSpinner(true, `${fileName} generated successfully`);
                 const sourceFileContent = this.cleanGeneratedCode(response.content[0].text);
                 await FileManager.write(fileName, sourceFileContent);
                 logger.log(chalk.green(`✅ Generated ${fileName}`));
                 projectStructure[fileName] = null;
                 await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
             } catch (error) {
-                logger.error(`Error generating ${fileName}`, error);
+                logger.stopSpinner(false, `Error generating ${fileName}`);
+                logger.error(error.message, error);
                 throw error;
             }
         } else {
@@ -525,10 +526,10 @@ Return the content for each file in the following format:
 ...and so on for all files.
 `;
 
-        logger.log("Generating app description and metadata files...");
+        logger.startSpinner("Generating app description and metadata files...");
         try {
             const response = await getResponse(prompt, undefined, undefined, DEFAULT_MAX_NEW_TOKENS);
-            logger.log("App description and metadata files generated successfully");
+            logger.stopSpinner(true, "App description and metadata files generated successfully");
 
             const files = this.parseGeneratedFiles(response.content[0].text);
             for (const [fileName, content] of Object.entries(files)) {
@@ -538,7 +539,8 @@ Return the content for each file in the following format:
 
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
         } catch (error) {
-            logger.error("Error generating app description and metadata files", error);
+            logger.stopSpinner(false, "Error generating app description and metadata files");
+            logger.error(error.message, error);
             throw error;
         }
     },

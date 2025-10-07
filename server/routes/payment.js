@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import User from "../models/user.js";
 import { authCookie } from "../middleware/auth.js";
 import dotenv from "dotenv";
+import logger from "../../logger.js";
 dotenv.config();
 
 const router = express.Router();
@@ -12,7 +13,7 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
     const signature = req.headers["stripe-signature"];
     try {
         const event = stripe.webhooks.constructEvent(req.body, signature, process.env.STRIPE_WEBHOOK_SECRET);
-        console.log("✅ Success:", event.id);
+        logger.log("✅ Success:", event.id);
         switch (event.type) {
             case "customer.subscription.updated":
             case "customer.subscription.created":
@@ -27,21 +28,21 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
                 break;
             }
             default:
-                console.log(`Unhandled event type ${event.type}`);
+                logger.log(`Unhandled event type ${event.type}`);
         }
         res.send();
     } catch (err) {
-        console.error(err);
+        logger.error(err);
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 });
 
 async function handleSubscriptionUpdate(subscription) {
-    console.log(subscription);
+    logger.log(subscription);
     const customer = await stripe.customers.retrieve(subscription.customer);
     let user = await User.findOne({ email: customer.email });
     if (!user) {
-        console.log("User not found, skipping " + customer.email);
+        logger.log("User not found, skipping " + customer.email);
         return;
     }
     user.subscriptionStatus = subscription.status;
@@ -56,18 +57,18 @@ async function handleSubscriptionUpdate(subscription) {
 }
 
 export const handleCheckout = async (session) => {
-    console.log("handleCheckout started", session);
+    logger.log("handleCheckout started", session);
     try {
         const user = await User.findOne({ email: session.customer_details.email });
         if (!user || session.amount_total !== 3000) {
-            console.error("handleCheckout failed, not AutoCode user");
+            logger.error("handleCheckout failed, not AutoCode user");
             return;
         }
         user.tier = "LTD";
         await user.save();
-        console.log("handleCheckout succesfull", user);
+        logger.log("handleCheckout succesfull", user);
     } catch (e) {
-        console.error(e);
+        logger.error(e);
     }
 };
 
@@ -84,7 +85,7 @@ router.post("/cancel-subscription", authCookie, async (req, res) => {
         await user.save();
         res.json({ message: "Subscription cancelled successfully" });
     } catch (error) {
-        console.error("Error cancelling subscription:", error);
+        logger.error("Error cancelling subscription:", error);
         res.status(500).json({ error: "Failed to cancel subscription" });
     }
 });
