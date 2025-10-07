@@ -6,12 +6,11 @@ describe('ModelDownloader', () => {
   let mockSpawn;
   let mockFs;
   let mockGitProcess;
-  const mockUi = { log: jest.fn() };
+  let logger;
 
   beforeEach(async () => {
-    jest.resetModules(); // Isolate each test
+    jest.resetModules();
 
-    // Mock dependencies before importing the downloader
     mockGitProcess = new EventEmitter();
     mockGitProcess.stderr = new EventEmitter();
     mockSpawn = jest.fn().mockReturnValue(mockGitProcess);
@@ -27,14 +26,16 @@ describe('ModelDownloader', () => {
     jest.unstable_mockModule('fs/promises', () => ({
       default: mockFs,
     }));
+    jest.unstable_mockModule('../logger.js', () => ({
+        default: {
+          log: jest.fn(),
+          error: jest.fn(),
+        },
+    }));
 
-    // Import a fresh instance for each test
     const module = await import('../modelDownloader.js');
     modelDownloader = module.default;
-
-    // Mock console to keep test output clean
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-    mockUi.log.mockClear();
+    logger = (await import('../logger.js')).default;
   });
 
   afterEach(() => {
@@ -44,7 +45,7 @@ describe('ModelDownloader', () => {
   it('should successfully clone a model repository', async () => {
     mockFs.access.mockRejectedValue(new Error('File not found'));
 
-    const downloadPromise = modelDownloader.download('Intel/neural-chat-7b-v3-1-int8-ov', mockUi);
+    const downloadPromise = modelDownloader.download('Intel/neural-chat-7b-v3-1-int8-ov');
 
     process.nextTick(() => {
         mockGitProcess.emit('close', 0);
@@ -62,16 +63,16 @@ describe('ModelDownloader', () => {
   it('should skip downloading if the model directory already exists', async () => {
     mockFs.access.mockResolvedValue();
 
-    await modelDownloader.download('Intel/neural-chat-7b-v3-1-int8-ov', mockUi);
+    await modelDownloader.download('Intel/neural-chat-7b-v3-1-int8-ov');
 
-    expect(mockUi.log).toHaveBeenCalledWith(expect.stringContaining('already exists. Skipping download.'));
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('already exists. Skipping download.'));
     expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   it('should reject the promise if git clone fails', async () => {
     mockFs.access.mockRejectedValue(new Error('File not found'));
 
-    const downloadPromise = modelDownloader.download('invalid/model', mockUi);
+    const downloadPromise = modelDownloader.download('invalid/model');
 
     process.nextTick(() => {
         const errorMessage = 'Repository not found';
@@ -83,8 +84,8 @@ describe('ModelDownloader', () => {
   });
 
   it('should ensure the models directory exists', async () => {
-    mockFs.access.mockResolvedValue(); // Pretend model exists to stop before spawn
-    await modelDownloader.download('some/model', mockUi);
+    mockFs.access.mockResolvedValue();
+    await modelDownloader.download('some/model');
     expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringContaining('models'), { recursive: true });
   });
 });
