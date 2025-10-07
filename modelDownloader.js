@@ -30,7 +30,7 @@ class ModelDownloader {
             await fs.access(targetPath);
             ui.log(chalk.yellow(`Model '${modelName}' already exists. Skipping download.`));
             return;
-        } catch {
+        } catch (error) {
             // Directory does not exist, proceed with download
         }
 

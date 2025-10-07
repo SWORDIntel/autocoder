@@ -65,21 +65,23 @@ describe('CodeAnalyzer', () => {
   });
 
   describe('runLintChecks', () => {
+    const mockUi = { log: jest.fn() };
+
     it('should run lint checks successfully for a supported language', async () => {
-      await CodeAnalyzer.runLintChecks('test.js');
+      await CodeAnalyzer.runLintChecks('test.js', mockUi);
       expect(exec).toHaveBeenCalledWith('npx eslint test.js', expect.any(Object), expect.any(Function));
-      expect(console.log).toHaveBeenCalledWith('✅ eslint passed for test.js');
+      expect(mockUi.log).toHaveBeenCalledWith('✅ eslint passed for test.js');
     });
 
     it('should handle lint checks with errors', async () => {
       exec.mockImplementation((cmd, opts, cb) => cb({ message: 'Lint Error' }, { stdout: '', stderr: 'Error: Missing semicolon.' }));
-      await CodeAnalyzer.runLintChecks('test.js');
-      expect(console.log).toHaveBeenCalledWith('❌ Error running eslint: Lint Error');
+      await CodeAnalyzer.runLintChecks('test.js', mockUi);
+      expect(mockUi.log).toHaveBeenCalledWith('❌ Error running eslint: Lint Error');
     });
 
     it('should log a warning for unsupported file types', async () => {
-        await CodeAnalyzer.runLintChecks('test.txt');
-        expect(console.log).toHaveBeenCalledWith('⚠️ No linter configured for file extension: .txt');
+        await CodeAnalyzer.runLintChecks('test.txt', mockUi);
+        expect(mockUi.log).toHaveBeenCalledWith('⚠️ No linter configured for file extension: .txt');
         expect(exec).not.toHaveBeenCalled();
     });
   });

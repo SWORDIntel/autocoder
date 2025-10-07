@@ -1,6 +1,7 @@
 import blessed from 'blessed';
 import path from 'path';
 import { spawn } from 'child_process';
+import fs from 'fs/promises';
 import CodeAnalyzer from './codeAnalyzer.js';
 import FileManager from './fileManager.js';
 import CodeGenerator from './codeGenerator.js';
@@ -146,13 +147,12 @@ class TUI {
                     await DocumentationGenerator.generateProjectDocumentation(this.projectStructure);
                     this.log("✅ Project documentation generated.");
                     break;
-                case "Analyze code quality": {
+                case "Analyze code quality":
                     this.log(`Analyzing code quality for ${files[0]}...`);
                     const result = await CodeAnalyzer.analyzeCodeQuality(files[0]);
                     this.log(result.analysis);
                     this.log(`Finished analysis for ${files[0]}.`);
                     break;
-                }
                 case "Optimize project structure":
                     await CodeAnalyzer.optimizeProjectStructure(this.projectStructure, this);
                     break;
@@ -219,85 +219,11 @@ class TUI {
                     this.log(`File ${filePath} has ${lineCount} lines, exceeding the limit of ${CONFIG.maxFileLines}. Generating split suggestion...`);
                     const splitSuggestion = await CodeGenerator.splitLargeFile(filePath, content, this.projectStructure);
 
-                    if (!splitSuggestion) {
-                        this.log(`Could not generate a split suggestion for ${filePath}.`);
-                        break;
+                    if (splitSuggestion) {
+                        await this.showDiffView(filePath, content, splitSuggestion);
+                    } else {
+                        this.log("Could not generate a file split suggestion.");
                     }
-
-                    // Create a confirmation dialog
-                    const confirmBox = blessed.box({
-                        parent: this.screen,
-                        top: 'center',
-                        left: 'center',
-                        width: '80%',
-                        height: '80%',
-                        label: ' File Split Suggestion ',
-                        content: splitSuggestion,
-                        border: { type: 'line' },
-                        scrollable: true,
-                        alwaysScroll: true,
-                        scrollbar: { ch: ' ', inverse: true },
-                        keys: true,
-                        vi: true,
-                    });
-
-                    const yesButton = blessed.button({
-                        parent: confirmBox,
-                        mouse: true,
-                        keys: true,
-                        shrink: true,
-                        padding: { left: 1, right: 1 },
-                        left: 2,
-                        bottom: 1,
-                        name: 'yes',
-                        content: 'Yes',
-                        style: {
-                            focus: { bg: 'blue' },
-                            hover: { bg: 'blue' }
-                        }
-                    });
-
-                    const noButton = blessed.button({
-                        parent: confirmBox,
-                        mouse: true,
-                        keys: true,
-                        shrink: true,
-                        padding: { left: 1, right: 1 },
-                        left: 10,
-                        bottom: 1,
-                        name: 'no',
-                        content: 'No',
-                        style: {
-                            focus: { bg: 'blue' },
-                            hover: { bg: 'blue' }
-                        }
-                    });
-
-                    yesButton.on('press', async () => {
-                        confirmBox.destroy();
-                        this.screen.render();
-                        this.log("Applying file split...");
-                        try {
-                            const parsedFiles = CodeGenerator.parseSplitSuggestion(splitSuggestion);
-                            await CodeGenerator.saveFiles(filePath, parsedFiles);
-                            this.log("✅ File split completed.");
-                            await this.refreshFileManager();
-                        } catch (e) {
-                            this.log(`❌ Error applying file split: ${e.message}`);
-                        }
-                        this.mainMenu.focus();
-                    });
-
-                    noButton.on('press', () => {
-                        confirmBox.destroy();
-                        this.screen.render();
-                        this.log("File split cancelled.");
-                        this.mainMenu.focus();
-                    });
-
-                    confirmBox.focus();
-                    this.screen.render();
-
                     break;
                 }
                 default:
@@ -308,6 +234,148 @@ class TUI {
             this.log(`ERROR during action '${action}': ${e.message}`);
             console.error(e);
         }
+    }
+
+    async showDiffView(originalFilePath, originalFileContent, splitSuggestion) {
+        const parsedFiles = CodeGenerator.parseSplitSuggestion(splitSuggestion);
+        const newFileNames = Object.keys(parsedFiles);
+
+        const container = blessed.box({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: '90%',
+            height: '90%',
+            label: ' File Split Suggestion - Review Changes ',
+            border: { type: 'line' },
+            style: { border: { fg: 'green' } },
+            keys: true,
+            vi: true,
+        });
+
+        // Left Panel for Original File
+        blessed.box({
+            parent: container,
+            top: 1,
+            left: 1,
+            width: '50%-2',
+            height: '100%-4',
+            label: ` Original: ${originalFilePath} `,
+            content: originalFileContent,
+            border: { type: 'line' },
+            scrollable: true,
+            alwaysScroll: true,
+            scrollbar: { ch: ' ', inverse: true },
+            keys: true,
+            vi: true,
+            mouse: true,
+        });
+
+        // Right Panel for New Files
+        const rightPanel = blessed.box({
+            parent: container,
+            top: 1,
+            right: 1,
+            width: '50%-1',
+            height: '100%-4',
+            label: ' New Files ',
+            border: { type: 'line' },
+        });
+
+        const newFilesList = blessed.list({
+            parent: rightPanel,
+            top: 1,
+            left: 1,
+            width: '100%-2',
+            height: '30%',
+            items: newFileNames,
+            label: 'Select a file to view',
+            border: { type: 'line' },
+            style: { selected: { bg: 'blue' } },
+            keys: true,
+            vi: true,
+            mouse: true,
+        });
+
+        const newFileContent = blessed.box({
+            parent: rightPanel,
+            top: '30%+1',
+            left: 1,
+            width: '100%-2',
+            height: '70%-2',
+            label: ' Content ',
+            content: '',
+            border: { type: 'line' },
+            scrollable: true,
+            alwaysScroll: true,
+            scrollbar: { ch: ' ', inverse: true },
+            keys: true,
+            vi: true,
+            mouse: true,
+        });
+
+        newFilesList.on('select', (item) => {
+            const fileName = item.getContent();
+            newFileContent.setLabel(` Content: ${fileName} `);
+            newFileContent.setContent(parsedFiles[fileName]);
+            this.screen.render();
+        });
+
+        if (newFileNames.length > 0) {
+            newFilesList.select(0);
+            newFileContent.setLabel(` Content: ${newFileNames[0]} `);
+            newFileContent.setContent(parsedFiles[newFileNames[0]]);
+        }
+
+        const applyButton = blessed.button({
+            parent: container,
+            mouse: true,
+            keys: true,
+            shrink: true,
+            padding: { left: 1, right: 1 },
+            right: 15,
+            bottom: 1,
+            name: 'apply',
+            content: 'Apply',
+            style: { focus: { bg: 'green' }, hover: { bg: 'green' } }
+        });
+
+        const cancelButton = blessed.button({
+            parent: container,
+            mouse: true,
+            keys: true,
+            shrink: true,
+            padding: { left: 1, right: 1 },
+            right: 2,
+            bottom: 1,
+            name: 'cancel',
+            content: 'Cancel',
+            style: { focus: { bg: 'red' }, hover: { bg: 'red' } }
+        });
+
+        applyButton.on('press', async () => {
+            container.destroy();
+            this.screen.render();
+            this.log("Applying file split...");
+            try {
+                await CodeGenerator.saveFiles(originalFilePath, parsedFiles);
+                this.log("✅ File split completed.");
+                await this.refreshFileManager();
+            } catch (e) {
+                this.log(`❌ Error applying file split: ${e.message}`);
+            }
+            this.mainMenu.focus();
+        });
+
+        cancelButton.on('press', () => {
+            container.destroy();
+            this.screen.render();
+            this.log("File split cancelled.");
+            this.mainMenu.focus();
+        });
+
+        container.focus();
+        this.screen.render();
     }
 
     async brainstormReadme() {
@@ -447,7 +515,7 @@ class TUI {
         });
 
         blessed.text({ parent: form, top: 4, left: 2, content: 'Tags (comma-separated):' });
-        blessed.textbox({
+        const tagsInput = blessed.textbox({
             parent: form, name: 'tags', top: 5, left: 2, height: 1, width: '95%',
             inputOnFocus: true, style: { focus: { bg: 'blue' } }
         });
@@ -478,7 +546,7 @@ class TUI {
     async promptForModel() {
         this.log("Analyzing hardware for recommendations...");
 
-        const analyzerPromise = new Promise((resolve) => {
+        const analyzerPromise = new Promise((resolve, reject) => {
             const process = spawn('python3', ['hardware_analyzer.py', '--json']);
             let report = '';
             let errorOutput = '';
@@ -586,7 +654,7 @@ class TUI {
     async refreshReadme() {
         try {
             this.readme = await FileManager.read(this.readmePath);
-        } catch {
+        } catch (e) {
             this.log(`Could not read README.md at ${this.readmePath}. Some features may not work.`);
             this.readme = "";
         }
