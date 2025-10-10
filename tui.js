@@ -10,30 +10,55 @@ import modelDownloader from './modelDownloader.js';
 import { CONFIG } from './config.js';
 import logger from './logger.js';
 
+const ACTIONS = {
+    BRAINSTORM_README: "📝 Brainstorm README.md",
+    GENERATE_CODE: "🔧 Generate code",
+    DETECT_MISSING_DEPENDENCIES: "🔍 Detect missing dependencies",
+    RUN_LINT_CHECKS: "🚀 Run static code quality checks",
+    GENERATE_DOCUMENTATION: "📚 Generate documentation",
+    OPTIMIZE_REFACTOR_FILE: "🔄 Optimize and refactor file",
+    GENERATE_PROJECT_DOCUMENTATION: "📚 Generate project documentation",
+    ANALYZE_CODE_QUALITY: "🤔 Analyze code quality",
+    OPTIMIZE_PROJECT_STRUCTURE: "🔍 Optimize project structure",
+    ADD_NEW_FILE: "➕ Add new file",
+    RUN_AI_AGENTS: "🤖 Run AI Agents",
+    SECURITY_ANALYSIS: "🔒 Security analysis",
+    GENERATE_UNIT_TESTS: "🧪 Generate unit tests",
+    ANALYZE_PERFORMANCE: "🚀 Analyze performance",
+    GENERATE_LANDING_PAGE: "🌐 Generate landing page",
+    GENERATE_API_DOCUMENTATION: "📊 Generate API documentation",
+    GENERATE_FULL_PROJECT: "🔄 Generate full project",
+    RECORD_MEMORY: "🧠 Record a Memory",
+    CHANGE_MODEL: "🤖 Change model",
+    DOWNLOAD_MODEL: "☁️ Download model",
+    SPLIT_LARGE_FILE: "📂 Split large file",
+};
+
+
 class TUI {
     constructor() {
         this.actionHandlers = {
-            "📝 Brainstorm README.md": this.brainstormReadme.bind(this),
-            "🔧 Generate code": this.processFiles.bind(this),
-            "🔍 Detect missing dependencies": this.detectMissingDependencies.bind(this),
-            "🚀 Run static code quality checks": this.runLintChecks.bind(this),
-            "📚 Generate documentation": this.generateDocumentation.bind(this),
-            "🔄 Optimize and refactor file": this.optimizeAndRefactorFile.bind(this),
-            "📚 Generate project documentation": this.generateProjectDocumentation.bind(this),
-            "🤔 Analyze code quality": this.analyzeCodeQuality.bind(this),
-            "🔍 Optimize project structure": this.optimizeProjectStructure.bind(this),
-            "➕ Add new file": this.promptForNewFile.bind(this),
-            "🤖 Run AI Agents": () => logger.log("AI Agents feature is not yet implemented."),
-            "🔒 Security analysis": this.checkSecurityVulnerabilities.bind(this),
-            "🧪 Generate unit tests": this.generateUnitTests.bind(this),
-            "🚀 Analyze performance": this.analyzePerformance.bind(this),
-            "🌐 Generate landing page": this.generateLandingPage.bind(this),
-            "📊 Generate API documentation": this.generateAPIDocumentation.bind(this),
-            "🔄 Generate full project": this.generateFullProject.bind(this),
-            "🧠 Record a Memory": this.promptForMemory.bind(this),
-            "🤖 Change model": this.promptForModel.bind(this),
-            "☁️ Download model": this.promptForModelDownload.bind(this),
-            "📂 Split large file": this.handleSplitLargeFile.bind(this),
+            [ACTIONS.BRAINSTORM_README]: this.brainstormReadme.bind(this),
+            [ACTIONS.GENERATE_CODE]: this.processFiles.bind(this),
+            [ACTIONS.DETECT_MISSING_DEPENDENCIES]: this.detectMissingDependencies.bind(this),
+            [ACTIONS.RUN_LINT_CHECKS]: this.runLintChecks.bind(this),
+            [ACTIONS.GENERATE_DOCUMENTATION]: this.generateDocumentation.bind(this),
+            [ACTIONS.OPTIMIZE_REFACTOR_FILE]: this.optimizeAndRefactorFile.bind(this),
+            [ACTIONS.GENERATE_PROJECT_DOCUMENTATION]: this.generateProjectDocumentation.bind(this),
+            [ACTIONS.ANALYZE_CODE_QUALITY]: this.analyzeCodeQuality.bind(this),
+            [ACTIONS.OPTIMIZE_PROJECT_STRUCTURE]: this.optimizeProjectStructure.bind(this),
+            [ACTIONS.ADD_NEW_FILE]: this.promptForNewFile.bind(this),
+            [ACTIONS.RUN_AI_AGENTS]: () => logger.log("AI Agents feature is not yet implemented."),
+            [ACTIONS.SECURITY_ANALYSIS]: this.checkSecurityVulnerabilities.bind(this),
+            [ACTIONS.GENERATE_UNIT_TESTS]: this.generateUnitTests.bind(this),
+            [ACTIONS.ANALYZE_PERFORMANCE]: this.analyzePerformance.bind(this),
+            [ACTIONS.GENERATE_LANDING_PAGE]: this.generateLandingPage.bind(this),
+            [ACTIONS.GENERATE_API_DOCUMENTATION]: this.generateAPIDocumentation.bind(this),
+            [ACTIONS.GENERATE_FULL_PROJECT]: this.generateFullProject.bind(this),
+            [ACTIONS.RECORD_MEMORY]: this.promptForMemory.bind(this),
+            [ACTIONS.CHANGE_MODEL]: this.promptForModel.bind(this),
+            [ACTIONS.DOWNLOAD_MODEL]: this.promptForModelDownload.bind(this),
+            [ACTIONS.SPLIT_LARGE_FILE]: this.handleSplitLargeFile.bind(this),
         };
 
         this.screen = null;
@@ -45,15 +70,7 @@ class TUI {
         this.readme = null;
         this.readmePath = null;
 
-        this.actions = [
-            "📝 Brainstorm README.md", "🔧 Generate code", "🔍 Detect missing dependencies",
-            "🚀 Run static code quality checks", "📚 Generate documentation", "🔄 Optimize and refactor file",
-            "📚 Generate project documentation", "🤔 Analyze code quality", "🔍 Optimize project structure",
-            "➕ Add new file", "🤖 Run AI Agents", "🔒 Security analysis",
-            "🧪 Generate unit tests", "🚀 Analyze performance", "🌐 Generate landing page",
-            "📊 Generate API documentation", "🔄 Generate full project", "🧠 Record a Memory",
-            "🤖 Change model", "☁️ Download model", "📂 Split large file",
-        ];
+        this.actions = Object.values(ACTIONS);
     }
 
     async init() {
@@ -117,9 +134,9 @@ class TUI {
         logger.log(`Action selected: '${action}'`);
 
         const needsFile = [
-            "Generate code", "Run static code quality checks", "Generate documentation",
-            "Optimize and refactor file", "Analyze code quality", "Security analysis",
-            "Generate unit tests", "Analyze performance", "Record a Memory", "📂 Split large file",
+            ACTIONS.GENERATE_CODE, ACTIONS.RUN_LINT_CHECKS, ACTIONS.GENERATE_DOCUMENTATION,
+            ACTIONS.OPTIMIZE_REFACTOR_FILE, ACTIONS.ANALYZE_CODE_QUALITY, ACTIONS.SECURITY_ANALYSIS,
+            ACTIONS.GENERATE_UNIT_TESTS, ACTIONS.ANALYZE_PERFORMANCE, ACTIONS.RECORD_MEMORY, ACTIONS.SPLIT_LARGE_FILE,
         ];
 
         if (needsFile.includes(action)) {

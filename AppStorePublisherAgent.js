@@ -5,8 +5,8 @@ import { exec } from "child_process";
 import util from "util";
 import FileManager from "./fileManager.js";
 import { CONFIG } from "./config.js";
-import UserInterface from "./userInterface.js";
 import CodeGenerator from "./codeGenerator.js";
+import { getResponse } from "./model.js";
 
 const execPromise = util.promisify(exec);
 
@@ -116,8 +116,9 @@ const AppStorePublisherAgent = {
 
         Provide the information in a JSON format.`;
 
-        const metadata = await UserInterface.promptAI(prompt);
-        return JSON.parse(metadata);
+        const response = await getResponse(prompt);
+        const metadataText = CodeGenerator.cleanGeneratedCode(response.content[0].text);
+        return JSON.parse(metadataText);
     },
 
     async uploadScreenshots(platform) {

@@ -19,6 +19,8 @@ jest.unstable_mockModule('../fileManager.js', () => ({
   default: {
     read: jest.fn().mockResolvedValue('file content'),
     write: jest.fn().mockResolvedValue(),
+    getProjectStructure: jest.fn().mockResolvedValue({}),
+    getAllFiles: jest.fn().mockResolvedValue([]),
   },
 }));
 
@@ -151,5 +153,54 @@ describe('CodeAnalyzer', () => {
           const deps = CodeAnalyzer.extractJavaScriptDependencies(content);
           expect(deps).toEqual(expect.arrayContaining(['module-a', 'module-b', 'module-c', 'module-d', 'module-e']));
       });
+  });
+
+  describe('detectDeadCode', () => {
+    it('should call getResponse with the correct prompt', async () => {
+      FileManager.getProjectStructure.mockResolvedValue({ 'dead.js': null });
+      FileManager.getAllFiles.mockResolvedValue(['dead.js']);
+      FileManager.read.mockResolvedValue('export const unused = 1;');
+
+      await CodeAnalyzer.detectDeadCode();
+
+      expect(logger.log).toHaveBeenCalledWith('🔍 Detecting dead code...');
+      expect(getResponse).toHaveBeenCalled();
+      const prompt = getResponse.mock.calls[0][0];
+      expect(prompt).toContain('identify any dead code');
+      expect(prompt).toContain('export const unused = 1;');
+      expect(logger.log).toHaveBeenCalledWith('📊 Dead code analysis:');
+      expect(logger.log).toHaveBeenCalledWith('Mocked AI analysis');
+    });
+  });
+
+  describe('detectCodeSmells', () => {
+    it('should call getResponse with the correct prompt', async () => {
+      FileManager.read.mockResolvedValue('smelly file content');
+      await CodeAnalyzer.detectCodeSmells('smelly.js');
+
+      expect(logger.log).toHaveBeenCalledWith('🔍 Detecting code smells for smelly.js...');
+      expect(getResponse).toHaveBeenCalled();
+      const prompt = getResponse.mock.calls[0][0];
+      expect(prompt).toContain('Analyze the following file for code smells: smelly.js');
+      expect(prompt).toContain('smelly file content');
+      expect(logger.log).toHaveBeenCalledWith('📊 Code smell analysis for smelly.js:');
+      expect(logger.log).toHaveBeenCalledWith('Mocked AI analysis');
+    });
+  });
+
+  describe('suggestCrossFileRefactoring', () => {
+    it('should call getResponse with the correct prompt', async () => {
+      FileManager.read.mockImplementation(file => Promise.resolve(`// content of ${file}`));
+      await CodeAnalyzer.suggestCrossFileRefactoring(['file1.js', 'file2.js']);
+
+      expect(logger.log).toHaveBeenCalledWith('🔍 Suggesting cross-file refactoring...');
+      expect(getResponse).toHaveBeenCalled();
+      const prompt = getResponse.mock.calls[0][0];
+      expect(prompt).toContain('suggest cross-file refactorings');
+      expect(prompt).toContain('content of file1.js');
+      expect(prompt).toContain('content of file2.js');
+      expect(logger.log).toHaveBeenCalledWith('📊 Cross-file refactoring suggestions:');
+      expect(logger.log).toHaveBeenCalledWith('Mocked AI analysis');
+    });
   });
 });
