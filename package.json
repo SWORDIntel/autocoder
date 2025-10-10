@@ -7,12 +7,16 @@
     "bin": {
         "autocode-ai": "./index.js"
     },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/MaxSveshnikov/autocode.git"
+    },
     "scripts": {
         "start": "node index.js",
         "lint": "eslint . --ignore-pattern dist/*",
         "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
         "copy": "copy.cmd",
-        "build": "node scripts/copy-files.js",
+        "build": "node scripts/build.js",
         "publish": "npm publish ./dist"
     },
     "keywords": [

@@ -74,7 +74,6 @@ console.log(aiResponse);
 | Dependency             | Purpose                             |
 | ---------------------- | ----------------------------------- |
 | `@anthropic-ai/sdk`    | Official Claude API client          |
-| `./userInterface.js`   | User preference management          |
 | `./config.js` (CONFIG) | Application configuration constants |
 | `./deepseek.js`        | Deepseek API integration            |
 
@@ -139,7 +138,6 @@ async function generateAnalysis(requirements) {
 ```mermaid
 graph TD
     A[index.js] --> B[model.js]
-    B --> C[userInterface.js]
     B --> D[deepseek.js]
     B --> E[config.js]
     F[BusinessAnalystAgent.js] --> B

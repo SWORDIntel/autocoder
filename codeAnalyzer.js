@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { CONFIG } from "./config.js";
@@ -36,7 +35,7 @@ const CodeAnalyzer = {
             });
             return `✅ Memory successfully recorded for ${file}.`;
         } catch (error) {
-            logger.error(chalk.red(`❌ An error occurred during memory recording for ${file}:`), error);
+            logger.error(`❌ An error occurred during memory recording for ${file}:`, error);
             return `❌ Error recording memory: ${error.message}`;
         } finally {
             await MemoryManager.disconnect();
@@ -78,15 +77,16 @@ const CodeAnalyzer = {
             }
 
             const fileContent = await FileManager.read(filePath);
-            const prompt = PromptBuilder.buildFixLintErrorsPrompt(
-                this.getLanguageFromExtension(path.extname(filePath)),
-                filePath,
-                lintOutput,
-                fileContent,
-                projectStructure
-            );
+            const promptBuilder = new PromptBuilder()
+                .setTask(`Please fix the following linter errors in the ${this.getLanguageFromExtension(path.extname(filePath))} file ${filePath}:`)
+                .addSection("Linter Output", lintOutput)
+                .addSection("Current file content", fileContent)
+                .addSection("Project structure", JSON.stringify(projectStructure, null, 2))
+                .setInstructions(
+                    "Please provide the corrected code that addresses all the linter errors. Consider the project structure when making changes. Do not include any explanations or comments in your response, just provide the code."
+                );
 
-            const response = await getResponse(prompt);
+            const response = await getResponse(promptBuilder.build());
 
             await FileManager.write(filePath, response.content[0].text);
             logger.log(`✅ Lint errors fixed for ${filePath}`);
@@ -101,8 +101,19 @@ const CodeAnalyzer = {
     async optimizeProjectStructure(projectStructure) {
         logger.log("🔧 Optimizing project structure...");
         try {
-            const prompt = PromptBuilder.buildOptimizeProjectStructurePrompt(projectStructure);
-            const response = await getResponse(prompt);
+            const promptBuilder = new PromptBuilder()
+                .setTask("Analyze the following project structure and provide optimization suggestions:")
+                .addSection("Project Structure", JSON.stringify(projectStructure, null, 2))
+                .setInstructions(
+                    `Please provide suggestions for optimizing the project structure, including:
+1. Reorganizing files and folders
+2. Splitting or merging modules
+3. Improving naming conventions
+4. Enhancing overall project architecture
+
+Provide the suggestions in a structured format.`
+                );
+            const response = await getResponse(promptBuilder.build());
 
             logger.log("📊 Project structure optimization suggestions:");
             logger.log(response.content[0].text);
@@ -126,7 +137,7 @@ const CodeAnalyzer = {
             const searchTags = [language, 'general'];
             relatedMemories = await MemoryManager.searchMemories(fileContent, searchTags);
         } catch (error) {
-            logger.error(chalk.red("❌ Error searching memories:"), error);
+            logger.error("❌ Error searching memories:", error);
         } finally {
             await MemoryManager.disconnect();
         }
@@ -144,9 +155,22 @@ ${mem.code}
 ---`).join('\n')
             : "No specific memories found for this code, but analyze it based on general best practices.";
 
-        const prompt = PromptBuilder.buildAnalyzeCodeQualityPrompt(language, fileContent, memoryContext);
+        const promptBuilder = new PromptBuilder()
+            .setTask(`Analyze the following ${language} code for quality and provide improvement suggestions:`)
+            .addSection("Code", fileContent)
+            .addSection("Memory Context", memoryContext)
+            .setInstructions(
+                `Please consider:
+1. Adherence to DRY, KISS, and SRP principles
+2. Code readability and maintainability
+3. Potential performance improvements
+4. Error handling and edge cases
+5. Security considerations
+6. ${language}-specific best practices
+Provide the suggestions in a structured format.`
+            );
 
-        const response = await getResponse(prompt);
+        const response = await getResponse(promptBuilder.build());
         await CodeGenerator.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
 
         return {
@@ -162,8 +186,22 @@ ${mem.code}
         logger.log("🔍 Detecting missing dependencies...");
         const packageContent = await this.getPackageFileContent(projectStructure);
         const dependenciesGraph = await this.analyzeDependencies(projectStructure);
-        const prompt = PromptBuilder.buildDetectMissingDependenciesPrompt(projectStructure, dependenciesGraph, packageContent);
-        const response = await getResponse(prompt);
+        const promptBuilder = new PromptBuilder()
+            .setTask("Analyze the following project structure and detect any missing dependencies or files:")
+            .addSection("Project Structure", JSON.stringify(projectStructure, null, 2))
+            .addSection("Dependencies Graph", JSON.stringify(dependenciesGraph, null, 2))
+            .addSection("Package File Content", packageContent)
+            .setInstructions(
+                `Please identify:
+1. Missing packages based on import statements for each supported language (e.g., {"javascript": ["react"], "python": ["numpy"]})
+2. Missing files that are referenced but not present in the project structure (please always return filenames based on repo root)
+3. Potential circular dependencies
+4. Dependencies listed in the package file but not used in the project
+5. Dependencies used in the project but not listed in the package file
+
+Provide the results in a single JSON code snippet.`
+            );
+        const response = await getResponse(promptBuilder.build());
 
         logger.log("📊 Missing dependencies analysis:");
         logger.log(response.content[0].text);
@@ -418,8 +456,16 @@ Generate unit tests for the following ${language} code...`; // Simplified for br
             fileContents[file] = await FileManager.read(file);
         }
 
-        const prompt = PromptBuilder.buildDetectDeadCodePrompt(projectStructure, fileContents);
-        const response = await getResponse(prompt);
+        const promptBuilder = new PromptBuilder()
+            .setTask(
+                "Analyze the following project files and identify any dead code. Dead code includes unused exports, functions, classes, or variables that are not referenced anywhere in the project."
+            )
+            .addSection("Project Structure", JSON.stringify(projectStructure, null, 2))
+            .addSection("File Contents", JSON.stringify(fileContents, null, 2))
+            .setInstructions(
+                "Please provide the results as a JSON object where the keys are file paths and the values are arrays of objects, each with 'name' and 'line' of the dead code."
+            );
+        const response = await getResponse(promptBuilder.build());
 
         logger.log("📊 Dead code analysis:");
         logger.log(response.content[0].text);
@@ -428,8 +474,21 @@ Generate unit tests for the following ${language} code...`; // Simplified for br
     async detectCodeSmells(filePath) {
         logger.log(`🔍 Detecting code smells for ${filePath}...`);
         const fileContent = await FileManager.read(filePath);
-        const prompt = PromptBuilder.buildDetectCodeSmellsPrompt(filePath, fileContent);
-        const response = await getResponse(prompt);
+        const promptBuilder = new PromptBuilder()
+            .setTask(`Analyze the following file for code smells: ${filePath}`)
+            .addSection("Code", fileContent)
+            .setInstructions(
+                `Please identify common code smells such as:
+- Long methods
+- Large classes
+- Duplicated code
+- Feature envy
+- Inappropriate intimacy
+- Shotgun surgery
+
+Provide the results as a list of code smells found, with a brief explanation and the line number where the smell occurs.`
+            );
+        const response = await getResponse(promptBuilder.build());
 
         logger.log(`📊 Code smell analysis for ${filePath}:`);
         logger.log(response.content[0].text);
@@ -442,8 +501,18 @@ Generate unit tests for the following ${language} code...`; // Simplified for br
             fileContents[file] = await FileManager.read(file);
         }
 
-        const prompt = PromptBuilder.buildSuggestCrossFileRefactoringPrompt(JSON.stringify(fileContents, null, 2));
-        const response = await getResponse(prompt);
+        const promptBuilder = new PromptBuilder()
+            .setTask("Analyze the following files and suggest cross-file refactorings:")
+            .addSection("File Contents", JSON.stringify(fileContents, null, 2))
+            .setInstructions(
+                `Please identify opportunities to:
+- Extract shared logic into new modules
+- Move functions or classes to more appropriate files
+- Improve the overall project structure by refactoring across files
+
+Provide the results as a list of suggestions, with a clear explanation of the proposed changes.`
+            );
+        const response = await getResponse(promptBuilder.build());
 
         logger.log("📊 Cross-file refactoring suggestions:");
         logger.log(response.content[0].text);

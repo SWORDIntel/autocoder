@@ -30,7 +30,6 @@ AutoCode follows a modular architecture, consisting of several key components:
     - `codeGenerator.js`: Handles the generation of new code based on instructions and API responses.
     - `codeAnalyzer.js`: Analyzes existing code for quality and improvement opportunities.
     - `fileManager.js`: Manages file operations and project structure.
-    - `userInterface.js`: Handles user interactions and command-line interface.
 
 2. **Support Components**:
 
@@ -49,9 +48,8 @@ AutoCode follows a modular architecture, consisting of several key components:
 ## Module Interactions
 
 1. `index.js` initializes the application and orchestrates the interaction between different modules.
-2. `userInterface.js` prompts the user for actions and delegates tasks to appropriate modules.
-3. `codeGenerator.js` and `codeAnalyzer.js` work together to generate, optimize, and analyze code.
-4. `fileManager.js` handles all file system operations, including reading and writing files.
+2. `codeGenerator.js` and `codeAnalyzer.js` work together to generate, optimize, and analyze code.
+3. `fileManager.js` handles all file system operations, including reading and writing files.
 5. `documentationGenerator.js` creates documentation based on the generated code and project structure.
 6. `licenseManager.js` interacts with the server components to validate licenses and manage user authentication.
 

@@ -11,7 +11,6 @@
 -   `@anthropic-ai/sdk`: Anthropic AI SDK for generating insights
 -   `./config.js`: Project configuration
 -   `./fileManager.js`: File management utilities
--   `./userInterface.js`: User interface configuration
 
 ## Module Structure
 

@@ -13,7 +13,6 @@ The `AppStorePublisherAgent.js` is a specialized module designed to automate the
 -   Custom modules:
     -   `FileManager`: Manages file-related operations
     -   `CONFIG`: Configuration settings
-    -   `UserInterface`: Handles user interactions and AI prompts
     -   `CodeGenerator`: Generates code and description files
 
 ## Main Methods
@@ -167,7 +166,6 @@ await AppStorePublisherAgent.run(projectStructure, readmeContent);
 
 -   Requires `config.js` for server configurations
 -   Uses `fileManager.js` for file operations
--   Integrates with `userInterface.js` for AI interactions
 
 ## Recommended Environment
 

@@ -62,7 +62,6 @@ The application uses a top-level error handler to catch and display any unhandle
 This file interacts with several other modules in the project:
 
 - `fileManager.js`: Used for reading files and getting the project structure
-- `userInterface.js`: Handles user input and action processing
 - `licenseManager.js`: Manages license validation
 
 The `main()` function utilizes these modules to provide a cohesive user experience for code analysis, generation, and documentation tasks.

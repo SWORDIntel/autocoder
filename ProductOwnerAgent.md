@@ -11,7 +11,6 @@ The `ProductOwnerAgent.js` is a crucial component of an AI-driven project manage
 - `./fileManager.js`: Utility for file read/write operations
 - `chalk`: Terminal string styling
 - `ora`: Elegant terminal spinner
-- `./userInterface.js`: User interface configuration management
 
 ## Main Methods
 
