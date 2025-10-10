@@ -7,6 +7,7 @@ import CodeAnalyzer from "./codeAnalyzer.js";
 import DocumentationGenerator from "./documentationGenerator.js";
 import fs from "fs/promises";
 import { getResponse } from "./model.js";
+import inquirer from "inquirer";
 
 const DEFAULT_MAX_NEW_TOKENS = 4096;
 
@@ -133,7 +134,23 @@ Please provide your suggestions in the following Markdown format:
             logger.stopSpinner(true, "File split suggestion generated");
             const splitSuggestion = response.content[0].text;
             await this.calculateTokenStats(response.usage?.input_tokens, response.usage?.output_tokens);
-            return splitSuggestion;
+
+            const { confirm } = await inquirer.prompt([
+                {
+                    type: "confirm",
+                    name: "confirm",
+                    message: `Do you want to apply the following split suggestion?\n\n${splitSuggestion}`,
+                    default: true,
+                },
+            ]);
+
+            if (confirm) {
+                const files = this.parseSplitSuggestion(splitSuggestion);
+                await this.saveFiles(filePath, files);
+                logger.log(chalk.green("✅ Files split and saved successfully."));
+            } else {
+                logger.log(chalk.yellow("File splitting cancelled."));
+            }
         } catch (error) {
             logger.stopSpinner(false, "Error generating file split suggestion");
             logger.error(error.message, error);
@@ -295,7 +312,6 @@ Return the content of the ${dependencyFileName} file without explanations or com
 
     async generateAIAgentCode(agentType, agentDescription, projectStructure, readme) {
         const fileManagerContent = await FileManager.read("fileManager.js");
-        const userInterfaceContent = await FileManager.read("userInterface.js");
         const configContent = await FileManager.read("config.js");
 
         const prompt = `
@@ -311,9 +327,6 @@ ${JSON.stringify(projectStructure, null, 2)}
 
 fileManager.js content:
 ${fileManagerContent}
-
-userInterface.js content:
-${userInterfaceContent}
 
 config.js content:
 ${configContent}
@@ -377,7 +390,7 @@ Return the generated HTML code for the landing page without explanations or comm
     async generateFullProject(projectStructure, readme) {
         logger.log(chalk.cyan("🚀 Generating full project..."));
 
-        // TODO: Get language from TUI
+        // TODO: Get language from TUI instead of hardcoding
         const language = 'javascript';
         await this.generateDependencyFile(language, projectStructure, readme);
 
