@@ -9,7 +9,6 @@ This file serves as the entry point for the AutoCode application. It orchestrate
 - `path`: Node.js built-in module for handling file paths
 - `chalk`: External library for colorful console output
 - `FileManager`: Custom module for file operations
-- `UserInterface`: Custom module for handling user interactions
 - `LicenseManager`: Custom module for license management
 
 ## Main Functions

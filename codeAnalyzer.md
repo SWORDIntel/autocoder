@@ -2,7 +2,7 @@
 
 ## Overview
 
-`CodeAnalyzer.js` is a crucial component of the project that provides various code analysis and optimization functionalities. It works in conjunction with other modules like `FileManager`, `CodeGenerator`, and `UserInterface` to perform tasks such as linting, fixing errors, optimizing project structure, analyzing code quality, detecting missing dependencies, and generating unit tests.
+`CodeAnalyzer.js` is a crucial component of the project that provides various code analysis and optimization functionalities. It works in conjunction with other modules like `FileManager` and `CodeGenerator` to perform tasks such as linting, fixing errors, optimizing project structure, analyzing code quality, detecting missing dependencies, and generating unit tests.
 
 The module utilizes the Anthropic AI API to assist with code analysis and generation tasks. It supports multiple programming languages and adapts its behavior based on the file extensions and language-specific configurations defined in the `CONFIG` object.
 
@@ -205,4 +205,4 @@ The module relies on the `CONFIG` object imported from `./config.js`, which shou
 
 ## Note
 
-This module is designed to work in conjunction with other components of the project, such as `FileManager`, `CodeGenerator`, and `UserInterface`. It plays a central role in code analysis, optimization, and maintenance tasks within the project.
+This module is designed to work in conjunction with other components of the project, such as `FileManager` and `CodeGenerator`. It plays a central role in code analysis, optimization, and maintenance tasks within the project.

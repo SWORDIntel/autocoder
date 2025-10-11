@@ -9,7 +9,6 @@ The `model.js` file serves as the core AI model interaction layer for the applic
 
 This module centralizes AI response generation logic and works with:
 
--   User preferences through `UserInterface`
 -   Configuration values from `CONFIG`
 -   Environment variables for API keys
 -   External AI provider SDKs
@@ -98,8 +97,6 @@ This module serves as:
 
 | Source             | Value           | Default               |
 | ------------------ | --------------- | --------------------- |
-| `UserInterface`    | model selection | None (required input) |
-| `UserInterface`    | temperature     | None (required input) |
 | `CONFIG.maxTokens` | Response length | Defined in config.js  |
 
 ## Error Handling
@@ -109,7 +106,6 @@ The current implementation:
 -   Relies on upstream error handling
 -   Propagates API errors directly to callers
 -   Requires proper environment variable configuration
--   Assumes valid model selection from UserInterface
 
 ## Best Practices
 

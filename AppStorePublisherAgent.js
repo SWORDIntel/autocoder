@@ -7,17 +7,19 @@ import FileManager from "./fileManager.js";
 import { CONFIG } from "./config.js";
 import CodeGenerator from "./codeGenerator.js";
 import { getResponse } from "./model.js";
+import logger from "./logger.js";
+import PromptBuilder from "./promptBuilder.js";
 
 const execPromise = util.promisify(exec);
 
 const AppStorePublisherAgent = {
     async run(projectStructure, readme) {
-        console.log("App Store Publisher Agent: Starting publishing process...");
+        logger.log("App Store Publisher Agent: Starting publishing process...");
         await CodeGenerator.createAppDescriptionFiles(projectStructure, readme);
 
         const platform = await this.detectPlatform(projectStructure);
         if (!platform) {
-            console.log("App Store Publisher Agent: Unable to detect platform. Exiting.");
+            logger.log("App Store Publisher Agent: Unable to detect platform. Exiting.");
             return;
         }
 
@@ -27,7 +29,7 @@ const AppStorePublisherAgent = {
         await this.uploadScreenshots(platform);
         await this.submitForReview(platform);
 
-        console.log("App Store Publisher Agent: Publishing process completed.");
+        logger.log("App Store Publisher Agent: Publishing process completed.");
     },
 
     async detectPlatform(projectStructure) {
@@ -40,7 +42,7 @@ const AppStorePublisherAgent = {
     },
 
     async prepareApp(platform) {
-        console.log(`Preparing ${platform} app for submission...`);
+        logger.log(`Preparing ${platform} app for submission...`);
         if (platform === "android") {
             await execPromise("./gradlew assembleRelease");
         } else if (platform === "ios") {
@@ -49,7 +51,7 @@ const AppStorePublisherAgent = {
     },
 
     async generateMetadata(platform, readme) {
-        console.log("Generating app metadata...");
+        logger.log("Generating app metadata...");
         const metadata = this.extractMetadataFromReadme(readme);
 
         if (platform === "android") {
@@ -77,7 +79,7 @@ const AppStorePublisherAgent = {
     },
 
     async createDescriptionFiles(platform) {
-        console.log("Creating app description and metadata files...");
+        logger.log("Creating app description and metadata files...");
         const metadata = await this.generateAppMetadata();
 
         const metadataDir = path.join(
@@ -102,27 +104,30 @@ const AppStorePublisherAgent = {
             await FileManager.write(path.join(metadataDir, fileName), content);
         }
 
-        console.log("App description and metadata files created successfully.");
+        logger.log("App description and metadata files created successfully.");
     },
 
     async generateAppMetadata() {
-        const prompt = `Generate app metadata for the App Store and Google Play Store, including:
-        1. App name
-        2. Subtitle
-        3. Privacy policy URL
-        4. Support URL
-        5. Marketing URL
-        6. Release notes for the latest version
+        const promptBuilder = new PromptBuilder()
+            .setTask("Generate app metadata for the App Store and Google Play Store, including:")
+            .addSection(
+                "Metadata fields",
+                `1. App name
+2. Subtitle
+3. Privacy policy URL
+4. Support URL
+5. Marketing URL
+6. Release notes for the latest version`
+            )
+            .setInstructions("Provide the information in a JSON format.");
 
-        Provide the information in a JSON format.`;
-
-        const response = await getResponse(prompt);
+        const response = await getResponse(promptBuilder.build());
         const metadataText = CodeGenerator.cleanGeneratedCode(response.content[0].text);
         return JSON.parse(metadataText);
     },
 
     async uploadScreenshots(platform) {
-        console.log("Uploading screenshots...");
+        logger.log("Uploading screenshots...");
         const screenshotDir = path.join(process.cwd(), "fastlane", "screenshots");
         const screenshots = await fs.readdir(screenshotDir);
 
@@ -155,7 +160,7 @@ const AppStorePublisherAgent = {
     },
 
     async submitForReview(platform) {
-        console.log("Submitting app for review...");
+        logger.log("Submitting app for review...");
         if (platform === "android") {
             await execPromise("fastlane supply --track production");
         } else if (platform === "ios") {

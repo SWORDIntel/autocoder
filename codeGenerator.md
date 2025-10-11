@@ -131,4 +131,4 @@ await CodeGenerator.optimizeAndRefactorFile("app.js", projectStructure);
 await CodeGenerator.generateFullProject(projectStructure, readme);
 ```
 
-This module is central to the project's code generation and management capabilities, interacting with various other modules like `FileManager`, `CodeAnalyzer`, `DocumentationGenerator`, and `UserInterface` to provide a comprehensive code generation solution.
+This module is central to the project's code generation and management capabilities, interacting with various other modules like `FileManager`, `CodeAnalyzer`, and `DocumentationGenerator` to provide a comprehensive code generation solution.

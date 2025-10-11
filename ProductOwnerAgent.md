@@ -77,7 +77,6 @@ await ProductOwnerAgent.generateSprintPlan(projectStructure, readmeContent);
 ## Configuration and Environment
 
 - Requires `CLAUDE_KEY` environment variable for Anthropic API authentication
-- Uses dynamic model and temperature selection via `UserInterface`
 - Configurable max tokens via `CONFIG.maxTokens`
 
 ## Output Files

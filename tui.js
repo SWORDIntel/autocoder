@@ -9,6 +9,7 @@ import settingsManager from './settingsManager.js';
 import modelDownloader from './modelDownloader.js';
 import { CONFIG } from './config.js';
 import logger from './logger.js';
+import LicenseManager from './licenseManager.js';
 
 const ACTIONS = {
     BRAINSTORM_README: "📝 Brainstorm README.md",
@@ -32,6 +33,7 @@ const ACTIONS = {
     CHANGE_MODEL: "🤖 Change model",
     DOWNLOAD_MODEL: "☁️ Download model",
     SPLIT_LARGE_FILE: "📂 Split large file",
+    LOGIN: "🔒 Login",
 };
 
 
@@ -59,6 +61,7 @@ class TUI {
             [ACTIONS.CHANGE_MODEL]: this.promptForModel.bind(this),
             [ACTIONS.DOWNLOAD_MODEL]: this.promptForModelDownload.bind(this),
             [ACTIONS.SPLIT_LARGE_FILE]: this.handleSplitLargeFile.bind(this),
+            [ACTIONS.LOGIN]: this.handleLogin.bind(this),
         };
 
         this.screen = null;
@@ -69,8 +72,6 @@ class TUI {
         this.projectStructure = null;
         this.readme = null;
         this.readmePath = null;
-
-        this.actions = Object.values(ACTIONS);
     }
 
     async init() {
@@ -150,6 +151,13 @@ class TUI {
 
     async executeAction(action, files = []) {
         try {
+            const isLicenseValid = await LicenseManager.checkLicense();
+            if (!isLicenseValid) {
+                logger.log("License is not valid. Please login to continue.");
+                await this.handleLogin();
+                return;
+            }
+
             const handler = this.actionHandlers[action];
             if (handler) {
                 await handler(files);
@@ -157,9 +165,65 @@ class TUI {
                 logger.log(`Action '${action}' is not implemented.`);
             }
         } catch (e) {
-            logger.log(`ERROR during action '${action}': ${e.message}`);
-            logger.error(e);
+            if (e.message.includes("Your session has expired")) {
+                logger.log("Session expired. Please log in again.");
+                await this.handleLogin();
+            } else {
+                logger.log(`ERROR during action '${action}': ${e.message}`);
+                logger.error(e);
+            }
         }
+    }
+
+    async handleLogin() {
+        const form = blessed.form({
+            parent: this.screen,
+            width: '50%',
+            height: 7,
+            top: 'center',
+            left: 'center',
+            border: 'line',
+            label: ' Login ',
+            keys: true,
+        });
+
+        blessed.text({ parent: form, top: 1, left: 2, content: 'Email:' });
+        const emailInput = blessed.textbox({
+            parent: form, name: 'email', top: 2, left: 2, height: 1, width: '95%',
+            inputOnFocus: true, style: { focus: { bg: 'blue' } }
+        });
+
+        blessed.text({ parent: form, top: 3, left: 2, content: 'Password:' });
+        const passwordInput = blessed.textbox({
+            parent: form, name: 'password', top: 4, left: 2, height: 1, width: '95%',
+            inputOnFocus: true, censor: true, style: { focus: { bg: 'blue' } }
+        });
+
+        const submit = blessed.button({
+            parent: form, name: 'submit', content: 'Login', top: 5, left: 2,
+            shrink: true, style: { focus: { bg: 'blue' } }
+        });
+
+        submit.on('press', () => form.submit());
+
+        form.on('submit', async (data) => {
+            form.destroy();
+            this.mainMenu.focus();
+            this.screen.render();
+            if (data.email && data.password) {
+                const success = await LicenseManager.login(data.email, data.password);
+                if (success) {
+                    logger.log("✅ Login successful.");
+                } else {
+                    logger.log("❌ Login failed. Please check your credentials.");
+                }
+            } else {
+                logger.log("⚠️ Email and password are required. Login cancelled.");
+            }
+        });
+
+        emailInput.focus();
+        this.screen.render();
     }
 
     async detectMissingDependencies() {
@@ -683,7 +747,7 @@ class TUI {
     }
 
     refreshMainMenu() {
-        const menuItems = this.actions.map((action, index) => `{bold}${index + 1}{/bold}: ${action}`);
+        const menuItems = Object.values(ACTIONS).map((action, index) => `{bold}${index + 1}{/bold}: ${action}`);
         this.mainMenu.setItems(menuItems);
         this.screen.render();
     }
