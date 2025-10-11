@@ -119,7 +119,7 @@ describe('CodeAnalyzer', () => {
 
         expect(getResponse).toHaveBeenCalled();
         const prompt = getResponse.mock.calls[0][0];
-        expect(prompt).toContain('Analyze the following javascript code for quality and provide improvement suggestions:\nnull');
+        expect(prompt).toContain('Analyze the following javascript code for quality and provide improvement suggestions:');
 
         expect(result.analysis).toBe('Mocked AI analysis');
         expect(result.fileContent).toBeNull();

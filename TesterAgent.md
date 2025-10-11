@@ -12,7 +12,6 @@
 - `./fileManager.js`: File system operations
 - `./codeGenerator.js`: Code generation and optimization
 - `./codeAnalyzer.js`: Code analysis utilities
-- `./userInterface.js`: User interaction and model selection
 
 ## Class: TesterAgent
 

@@ -2,7 +2,6 @@ import { CONFIG } from "./config.js";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import chalk from "chalk";
 import logger from "./logger.js";
 
 const serverUrl = CONFIG.licenseServerUrl;
@@ -49,17 +48,15 @@ const LicenseManager = {
             });
             if (!response.ok) {
                 if (response.status === 401 || response.status === 403) {
-                    logger.log(chalk.yellow("Your session has expired. Please login again."));
-                    // The TUI will need to handle the re-login flow.
-                    return false;
+                    throw new Error("Your session has expired. Please login again.");
                 }
                 throw new Error("License check failed");
             }
             const data = await response.json();
             return data.message === "Request allowed";
         } catch (error) {
-            logger.log(chalk.red(error.message));
-            return false;
+            logger.error(error.message);
+            throw error;
         }
     },
 

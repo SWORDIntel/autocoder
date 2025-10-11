@@ -73,7 +73,6 @@ Given the project structure, `config.js` likely interacts with several other com
 -   `documentationGenerator.js` might reference language-specific settings.
 -   `fileManager.js` would use file exclusion settings.
 -   `index.js` could import and distribute configuration settings to other modules.
--   `userInterface.js` might use AI agent information for display purposes.
 -   The server's `license-server.js` would likely reference the `licenseServerUrl`.
 
 ## Maintenance

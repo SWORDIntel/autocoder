@@ -11,7 +11,6 @@ The `ProductOwnerAgent.js` is a crucial component of an AI-driven project manage
 - `./fileManager.js`: Utility for file read/write operations
 - `chalk`: Terminal string styling
 - `ora`: Elegant terminal spinner
-- `./userInterface.js`: User interface configuration management
 
 ## Main Methods
 
@@ -78,7 +77,6 @@ await ProductOwnerAgent.generateSprintPlan(projectStructure, readmeContent);
 ## Configuration and Environment
 
 - Requires `CLAUDE_KEY` environment variable for Anthropic API authentication
-- Uses dynamic model and temperature selection via `UserInterface`
 - Configurable max tokens via `CONFIG.maxTokens`
 
 ## Output Files

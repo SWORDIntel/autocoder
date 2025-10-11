@@ -9,7 +9,6 @@ The `model.js` file serves as the core AI model interaction layer for the applic
 
 This module centralizes AI response generation logic and works with:
 
--   User preferences through `UserInterface`
 -   Configuration values from `CONFIG`
 -   Environment variables for API keys
 -   External AI provider SDKs
@@ -74,7 +73,6 @@ console.log(aiResponse);
 | Dependency             | Purpose                             |
 | ---------------------- | ----------------------------------- |
 | `@anthropic-ai/sdk`    | Official Claude API client          |
-| `./userInterface.js`   | User preference management          |
 | `./config.js` (CONFIG) | Application configuration constants |
 | `./deepseek.js`        | Deepseek API integration            |
 
@@ -99,8 +97,6 @@ This module serves as:
 
 | Source             | Value           | Default               |
 | ------------------ | --------------- | --------------------- |
-| `UserInterface`    | model selection | None (required input) |
-| `UserInterface`    | temperature     | None (required input) |
 | `CONFIG.maxTokens` | Response length | Defined in config.js  |
 
 ## Error Handling
@@ -110,7 +106,6 @@ The current implementation:
 -   Relies on upstream error handling
 -   Propagates API errors directly to callers
 -   Requires proper environment variable configuration
--   Assumes valid model selection from UserInterface
 
 ## Best Practices
 
@@ -139,7 +134,6 @@ async function generateAnalysis(requirements) {
 ```mermaid
 graph TD
     A[index.js] --> B[model.js]
-    B --> C[userInterface.js]
     B --> D[deepseek.js]
     B --> E[config.js]
     F[BusinessAnalystAgent.js] --> B

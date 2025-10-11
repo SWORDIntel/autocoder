@@ -19,7 +19,6 @@ The `licenseManager.js` file is a crucial component of the Autocode project, res
 -   `path`: Path manipulation utility
 -   `os`: Operating system-related utility
 -   `chalk`: Terminal string styling
--   `UserInterface`: Custom module for handling user interactions
 
 ## Constants
 
@@ -128,9 +127,8 @@ Loads the local trial usage data from the file.
 The `LicenseManager` module plays a central role in the Autocode project:
 
 1. It's likely used by the main `index.js` file to verify license status before performing key operations.
-2. It interacts with the `UserInterface` module to handle login scenarios.
-3. It relies on the `config.js` file for server URL configuration.
-4. It indirectly interacts with the server-side components, particularly the `/auth` and `/license` routes defined in the server's `routes` directory.
+2. It relies on the `config.js` file for server URL configuration.
+3. It indirectly interacts with the server-side components, particularly the `/auth` and `/license` routes defined in the server's `routes` directory.
 
 ## Error Handling
 

@@ -58,7 +58,6 @@ AutoCode reads your README.md file and your sources and sends the instructions t
 -   `documentationGenerator.js`: Automatically generates documentation for the project
 -   `fileManager.js`: Handles file operations and project structure management
 -   `index.js`: Main entry point of the application
--   `userInterface.js`: Manages user interactions and command-line interface
 -   `landing.html`: Template for generating project landing pages
 -   `licenseManager.js`: Handles license management and validation
 -   `server/index.js`: Express.js backend main point

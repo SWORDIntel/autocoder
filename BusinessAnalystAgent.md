@@ -11,7 +11,6 @@
 -   `@anthropic-ai/sdk`: Anthropic AI SDK for generating insights
 -   `./config.js`: Project configuration
 -   `./fileManager.js`: File management utilities
--   `./userInterface.js`: User interface configuration
 
 ## Module Structure
 
@@ -100,7 +99,6 @@ Generates and saves a prioritized list of features based on business insights.
 ## Configuration
 
 -   Uses environment variable `CLAUDE_KEY` for Anthropic API authentication
--   Configurable model and temperature via `UserInterface` methods
 -   Maximum token limit from `CONFIG.maxTokens`
 
 ## Project Context
