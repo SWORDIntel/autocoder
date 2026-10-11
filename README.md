@@ -82,3 +82,7 @@ AutoCode currently supports the following programming languages:
 Each language has its own configuration for file extensions, recommended linter, formatter, and package manager.
 
 # TODO
+
+## License
+
+This project is licensed under the **SWORD Restricted Source Licence v1.0 (SRSL-1.0)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE).
